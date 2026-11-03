@@ -488,9 +488,9 @@ function rotPt(sh, x, y, inv = false) {
   const a = (sh.rotate || 0) * (inv ? -1 : 1), c = Math.cos(a), s = Math.sin(a), dx = x - 4.5, dy = y - 4.2;
   return [4.5 + dx * c - dy * s, 4.2 + dx * s + dy * c];
 }
-/* A cleaned-up bean steak: even, leaning body with a soft dip on the top-left edge,
-   wide enough to overlap its neighbours in the bar. */
-const BEAN_POINTS = [[0.39, 6.31], [0.2, 4.55], [1.17, 3.11], [2.65, 2.58], [3.45, 1.85], [4.52, 1.49], [5.83, 1.2], [7.57, 1.29], [8.8, 2.55], [8.5, 4.32], [7.48, 5.53], [6.52, 6.25], [5.64, 6.75], [4.67, 7.21], [3.38, 7.6], [1.66, 7.53]];
+/* A symmetrical bean steak: two matching rounded ends, a dip centred on the top edge and a
+   slight lean; wide enough to overlap its neighbours in the bar. */
+const BEAN_POINTS = [[0.47, 5.79], [0.2, 4.43], [0.85, 3.2], [1.89, 2.44], [3.05, 2.26], [3.97, 2.41], [4.62, 1.74], [5.66, 1.19], [6.95, 1.18], [8.21, 1.78], [8.8, 3.03], [8.64, 4.38], [8.05, 5.49], [7.29, 6.31], [6.45, 6.88], [5.58, 7.25], [4.65, 7.47], [3.64, 7.52], [2.54, 7.32], [1.4, 6.78]];
 /* Sample the slider shape's outline into editable points. */
 function shapeToPoints(sh, n = 12) {
   const pts = [];
