@@ -804,7 +804,7 @@ const EL_BORDER_KEYS = ["outline", "rough", "wave", "facets", "double", "thick",
   "bevel", "sticker", "feather", "drop", "waveType", "frame", "frameMat"];
 
 const EL_COMMON = {
-  design: "galaxy", texture: "galaxy", illus: "", stars: 1, texScale: 1, texStrength: 1, speed: 2, glow: 0.32,
+  design: "galaxy", texture: "galaxy", illus: "", gemFill: "facets", facetStr: 0.6, stars: 1, texScale: 1, texStrength: 1, speed: 2, glow: 0.32,
   border: "clean", outline: 0.5, rough: [0, 4], wave: [0, 0], facets: 0, double: false, thick: 0,
   outlineStyle: "solid", glowOut: 0, glowCol: "main", ring: 0, dash: 0, stitch: 0, bevel: 0, sticker: 0, feather: 0, drop: 0, waveType: "sine", frame: 0, frameMat: "stone",
   posX: 0, posY: 0, size: 1, tilt: 0, custom: false, points: [], smooth: 0.85,
@@ -837,6 +837,8 @@ const EL_DESIGNS = {
     plasma: D_("plasma", "#1a0040", "#ff2fa0", "#ffe14d", "#0a0018"),
     marble: D_("marble", "#3a1c4a", "#e9dff2", "#ffffff", "#1c0d24", { glow: 0, shine: 0.35 }),
     aurora: D_("aurora", "#04122a", "#22e0a0", "#a070ff", "#020a18"),
+    "galaxy-stone": D_("galaxy", "#1c0e54", "#5c28c4", "#b05cff", "#0a0606", { outline: 0.16, outlineStyle: "ink", frame: 1.05, frameMat: "stone", glow: 0, shine: 0, border: "stoneFrame", illus: "gemheart", gemFill: "texture", facetStr: 0.55 }),
+    "galaxy-silver": D_("galaxy", "#1c0e54", "#5c28c4", "#b05cff", "#0a0a0e", { outline: 0.14, outlineStyle: "ink", frame: 0.75, frameMat: "silver", glow: 0, shine: 0, border: "silverFrame", illus: "gemheart", gemFill: "texture", facetStr: 0.55 }),
     "ruby-stone": D_("heartcut", "#4b0816", "#b9283e", "#fad2cd", "#0a0606", { outline: 0.16, outlineStyle: "ink", frame: 1.05, frameMat: "stone", rough: [0.03, 6], glow: 0, shine: 0, border: "stoneFrame" , ...GEM_SHAPE , illus: "gemheart" }),
     "emerald-iron": D_("heartcut", "#032a14", "#14a050", "#9cffc4", "#0a0a0a", { outline: 0.14, outlineStyle: "ink", frame: 0.8, frameMat: "iron", glow: 0, shine: 0, border: "ironFrame" , ...GEM_SHAPE , illus: "gemheart" }),
     "sapphire-gold": D_("heartcut", "#06123e", "#2050d8", "#9cc0ff", "#0a0804", { outline: 0.14, outlineStyle: "ink", frame: 0.8, frameMat: "gold", glow: 0, shine: 0, border: "goldFrame" , ...GEM_SHAPE , illus: "gemheart" }),
@@ -1259,6 +1261,10 @@ function gemHeartIcon(S, el, cols, t, mode, flash, seed) {
   const mats = GH_MATS[el.frameMat] || null, faceMax = 0.64, outC = unhex(el.outlineCol || "#0a0606");
   const pal = tt => tt < 0.5 ? mixc(c1, c2, tt * 2) : mixc(c2, c3, (tt - 0.5) * 2);
   const emptyC = unhex(el.emptyCol || "#0a0612");
+  // gem fill: the cut ruby facets, or any texture (galaxy, nebula, lava...) seen through the cut facets
+  const texFill = el.gemFill === "texture", tex = el.texture, fs = el.facetStr ?? 0.6, tt0 = live ? t : 0;
+  const field = texFill && GALAXY_TEX[tex] ? starfield(S, 9, 9, tt0, P, galaxyOpts("heart", el, tex, seed)) : null;
+  const q = { kind: "heart", el, P, t: tt0, seed, fv: null, X: 0, Y: 0, ex: 0, ey: 0 };
   for (let j = 0; j < W; j++) for (let i = 0; i < W; i++) {
     const X = (i + 0.5) / S, Y = (j + 0.5) / S, x = 4.5 + (X - ox) / sz, y = 4.49 + (Y - oy) / sz;
     const dO = sdPolygon(x, y, GH.outer) * sz;
@@ -1290,12 +1296,21 @@ function gemHeartIcon(S, el, cols, t, mode, flash, seed) {
       if (fi < 0) { let bd = 9; GH.facets.forEach((F, k) => { const c = F.p.reduce((s, p) => [s[0] + p[0] / F.p.length, s[1] + p[1] / F.p.length], [0, 0]); const dd = Math.hypot(x - c[0], y - c[1]); if (dd < bd) { bd = dd; fi = k; } }); }
       const F = GH.facets[fi];
       let tt = F.t + 0.07 * ((x - 4.5) * -0.5 + (y - 4.5) * -0.5) / 4 + 0.025 * samp(T[2], X * 3, Y * 14);
-      if (live) tt += 0.05 * Math.sin(TAU * (t + fi * 0.37));                      // slow shimmer between facets
-      let g = pal(sat(tt));
+      if (live && !texFill) tt += 0.05 * Math.sin(TAU * (t + fi * 0.37));          // slow shimmer between facets
+      let g;
+      if (texFill) {
+        q.X = X; q.Y = Y; q.ex = (X - ox) / sz; q.ey = (Y - oy) / sz;
+        if (field) { const k3 = (j * W + i) * 3; q.fv = [field[k3], field[k3 + 1], field[k3 + 2]]; }
+        g = mixc(c2, texColor(tex, q), el.texStrength ?? 1);
+        g = mixc(scale3(g, 1.3), c2, 0.16);                                  // lift it so a full heart reads clearly at HUD size
+        const lf = 0.72 + 0.65 * sat(tt);                                    // each facet catches the light differently
+        g = mixc(g, scale3(g, lf), fs);
+        g = mixc(g, mixc(c3, WHITE, 0.5), sat(tt - 0.8) * 2 * fs * 0.6);     // glints on the brightest facets
+      } else g = pal(sat(tt));
       let ld = 9; for (let k = 0; k < F.p.length; k++) ld = Math.min(ld, segDist(x, y, F.p[k], F.p[(k + 1) % F.p.length]));
-      g = mixc(g, mixc(c3, WHITE, 0.3), sstep(0.045, 0.0, ld * sz) * (F.table ? 0.45 : 0.2));   // facet edges
+      g = mixc(g, mixc(c3, WHITE, 0.3), sstep(0.045, 0.0, ld * sz) * (F.table ? 0.45 : 0.2) * (texFill ? fs : 1));   // facet edges
       g = scale3(g, 1 - 0.35 * sstep(0.2, 0, -dG));                                            // shade under the frame lip
-      if (mode === "container") g = mixc(emptyC, scale3(g, 0.35), 0.45);
+      if (mode === "container") g = texFill ? mixc(emptyC, scale3(g, 0.18), 0.3) : mixc(emptyC, scale3(g, 0.35), 0.45);
       gemC = g;
     }
     let c = frameC && gemC ? mixc(frameC, gemC, cov(dG)) : (frameC || gemC);
@@ -1418,7 +1433,9 @@ function elSections(key, kind, name, cls) {
     SEL(p("glowCol"), "Glow colour", [["main", "Highlight colour"], ["white", "White"], ["outline", "Outline colour"]]),
     R(p("sticker"), "Sticker border", 0, 0.8, 0.01), R(p("ring"), "Outer ring gap", 0, 0.8, 0.01), R(p("drop"), "Drop shadow", 0, 1, 0.01));
   borderCtl.push(TG(p("double"), "Inner highlight line"));
-  const texCtl = [...(kind === "heart" ? [SEL(p("illus"), "Heart style", [["", "Built from the cards below"], ["gemheart", "Framed gem heart (picture match)"]])] : []),
+  const texCtl = [...(kind === "heart" ? [SEL(p("illus"), "Heart style", [["", "Built from the cards below"], ["gemheart", "Framed gem heart (picture match)"]]),
+      SEL(p("gemFill"), "Gem fill (framed gem heart)", [["facets", "Cut ruby facets"], ["texture", "Selected texture"]]),
+      R(p("facetStr"), "Facet shading on the texture", 0, 1, 0.01)] : []),
     R(p("stars"), "Stars", 0, 3, 0.05), R(p("texScale"), "Texture size", 0.3, 3, 0.01), R(p("texStrength"), "Texture strength", 0, 1, 0.01), R(p("glow"), "Edge glow", 0, 1, 0.01)];
   if (kind !== "armor") texCtl.push(SP(p("speed"), kind === "bar" ? "Flow speed" : "Animation speed"));
   const lightCtl = [AN(p("light"), "Light direction"), R(p("shade"), "Inner shadow", 0, 2.5, 0.01), R(p("falloff"), "Light falloff", 0, 2, 0.01),
@@ -1714,10 +1731,14 @@ for (const [key, kind] of [["heart", "heart"], ["armor", "armor"], ["xp", "bar"]
   chipSets["designs-" + key] = { tab: key, kind, names: Object.keys(EL_DESIGNS[kind]), label: n => cap(n.replace("-", " in ")), render: n => elThumb(kind, applyElDesign(kind, {}, n)),
     pick: n => applyElDesign(kind, st[key], n), sel: () => st[key].design };
   chipSets["textures-" + key] = { tab: key, kind, names: EL_TEXTURES, label: n => EL_TEX_LABEL[n], render: n => elThumb(kind, Object.assign(clone(st[key]), { texture: n })),
-    pick: n => { st[key].texture = n; st[key].illus = ""; }, sel: () => st[key].texture };
+    pick: n => { st[key].texture = n; if (st[key].illus === "gemheart") st[key].gemFill = "texture"; }, sel: () => st[key].texture };
   chipSets["borders-" + key] = { tab: key, kind, names: Object.keys(EL_BORDERS).filter(b => kind !== "bar" || !EL_OUTSIDE_BORDERS.includes(b)),
     label: n => EL_BORDERS[n].label, render: n => elThumb(kind, Object.assign(clone(st[key]), elBorderPreset(n))),
-    pick: n => Object.assign(st[key], elBorderPreset(n), { illus: "" }), sel: () => st[key].border };
+    pick: n => {
+      // with the framed gem heart, a frame border just swaps the frame material; other borders switch back to the built heart
+      if (st[key].illus === "gemheart" && EL_BORDERS[n].frameMat) Object.assign(st[key], { frameMat: EL_BORDERS[n].frameMat, border: n });
+      else Object.assign(st[key], elBorderPreset(n), { illus: "" });
+    }, sel: () => st[key].border };
 }
 const thumbs = [];
 for (const [set, cfg] of Object.entries(chipSets)) {
