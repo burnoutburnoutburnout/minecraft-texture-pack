@@ -763,8 +763,8 @@ const ELEM = {
   armor: { w: 9, h: 9, c: [4.5, 4.55], R: 6.5 },
   bar: { w: 182, h: 5, c: [91, 2.5], R: 0 },
 };
-const EL_TEXTURES = ["gem", "galaxy", "nebula", "starfield", "aurora", "crystal", "glossy", "solid", "gradient", "metal", "lava", "ice", "marble", "hologram", "plasma"];
-const EL_TEX_LABEL = { gem: "Cut gem", galaxy: "Galaxy", nebula: "Nebula", starfield: "Starfield", aurora: "Aurora", crystal: "Crystal", glossy: "Glossy", solid: "Solid",
+const EL_TEXTURES = ["heartcut", "gem", "galaxy", "nebula", "starfield", "aurora", "crystal", "glossy", "solid", "gradient", "metal", "lava", "ice", "marble", "hologram", "plasma"];
+const EL_TEX_LABEL = { heartcut: "Heart-cut gem", gem: "Round-cut gem", galaxy: "Galaxy", nebula: "Nebula", starfield: "Starfield", aurora: "Aurora", crystal: "Crystal", glossy: "Glossy", solid: "Solid",
   gradient: "Gradient", metal: "Metal", lava: "Lava", ice: "Ice", marble: "Marble", hologram: "Hologram", plasma: "Plasma" };
 const EL_BORDERS = {
   clean: { label: "Clean" }, thin: { label: "Thin line", outline: 0.25 }, thick: { label: "Thick line", outline: 0.8 },
@@ -791,7 +791,7 @@ const EL_BORDERS = {
   comic: { label: "Comic", outline: 0.75, outlineStyle: "ink", double: true },
   glass: { label: "Glass", outline: 0.2, outlineStyle: "light", bevel: 0.8, glowOut: 0.3 },
   frost: { label: "Frost", outline: 0.4, outlineStyle: "frost", rough: [0.05, 10], glowOut: 0.4, glowCol: "white" },
-  stoneFrame: { label: "Stone frame", outline: 0.14, outlineStyle: "ink", frame: 1.1, frameMat: "stone", rough: [0.035, 6] },
+  stoneFrame: { label: "Stone frame", outline: 0.16, outlineStyle: "ink", frame: 1.05, frameMat: "stone", rough: [0.03, 6] },
   ironFrame: { label: "Iron frame", outline: 0.14, outlineStyle: "ink", frame: 1.0, frameMat: "iron" },
   goldFrame: { label: "Gold frame", outline: 0.14, outlineStyle: "ink", frame: 1.0, frameMat: "gold" },
   bronzeFrame: { label: "Bronze frame", outline: 0.14, outlineStyle: "ink", frame: 1.0, frameMat: "bronze" },
@@ -819,9 +819,9 @@ const EL_DEFAULTS = {
     outline: 0.45, shine: 0.06, shineX: 0, shineY: -1.25, barH: 5, radius: 1.6, slant: 0, taper: 0, segments: 0, segGap: 0.6 }),
 };
 /* angular, gem-cut heart outline: straight sides, chamfered lobes and a sharp V notch */
-const GEM_HEART = [[4.5, 2.35], [5.35, 1.35], [6.55, 0.8], [7.85, 1.15], [8.6, 2.25], [8.65, 3.75], [7.95, 5.1], [6.3, 6.85], [4.5, 8.45],
-  [2.7, 6.85], [1.05, 5.1], [0.35, 3.75], [0.4, 2.25], [1.15, 1.15], [2.45, 0.8], [3.65, 1.35]];
-const GEM_SHAPE = { custom: true, points: GEM_HEART, smooth: 0.1 };
+const GEM_HEART = [[4.5, 1.75], [5.3, 1.0], [6.6, 0.6], [7.9, 0.85], [8.6, 1.7], [8.7, 3.1], [8.2, 4.6], [6.6, 6.5], [4.5, 8.5],
+  [2.4, 6.5], [0.8, 4.6], [0.3, 3.1], [0.4, 1.7], [1.1, 0.85], [2.4, 0.6], [3.7, 1.0]];
+const GEM_SHAPE = { custom: true, points: GEM_HEART, smooth: 0.08 };
 const D_ = (texture, c1, c2, c3, outlineCol, extra = {}) => Object.assign({ texture, c1, c2, c3, outlineCol }, extra);
 const EL_DESIGNS = {
   heart: {
@@ -837,10 +837,10 @@ const EL_DESIGNS = {
     plasma: D_("plasma", "#1a0040", "#ff2fa0", "#ffe14d", "#0a0018"),
     marble: D_("marble", "#3a1c4a", "#e9dff2", "#ffffff", "#1c0d24", { glow: 0, shine: 0.35 }),
     aurora: D_("aurora", "#04122a", "#22e0a0", "#a070ff", "#020a18"),
-    "ruby-stone": D_("gem", "#3a0209", "#c8102e", "#ff8a98", "#0a0606", { outline: 0.14, outlineStyle: "ink", frame: 1.1, frameMat: "stone", rough: [0.035, 6], glow: 0, shine: 0.3, border: "stoneFrame" , ...GEM_SHAPE }),
-    "emerald-iron": D_("gem", "#032a14", "#14a050", "#9cffc4", "#0a0a0a", { outline: 0.14, outlineStyle: "ink", frame: 1.0, frameMat: "iron", glow: 0, shine: 0.3, border: "ironFrame" , ...GEM_SHAPE }),
-    "sapphire-gold": D_("gem", "#06123e", "#2050d8", "#9cc0ff", "#0a0804", { outline: 0.14, outlineStyle: "ink", frame: 1.0, frameMat: "gold", glow: 0, shine: 0.3, border: "goldFrame" , ...GEM_SHAPE }),
-    "amethyst-silver": D_("gem", "#1e0838", "#8a3ad0", "#e0b4ff", "#0a0a0e", { outline: 0.14, outlineStyle: "ink", frame: 0.9, frameMat: "silver", glow: 0, shine: 0.3, border: "silverFrame" , ...GEM_SHAPE }),
+    "ruby-stone": D_("heartcut", "#46040e", "#b4142a", "#ff6c84", "#0a0606", { outline: 0.16, outlineStyle: "ink", frame: 1.05, frameMat: "stone", rough: [0.03, 6], glow: 0, shine: 0, border: "stoneFrame" , ...GEM_SHAPE }),
+    "emerald-iron": D_("heartcut", "#032a14", "#14a050", "#9cffc4", "#0a0a0a", { outline: 0.14, outlineStyle: "ink", frame: 0.8, frameMat: "iron", glow: 0, shine: 0, border: "ironFrame" , ...GEM_SHAPE }),
+    "sapphire-gold": D_("heartcut", "#06123e", "#2050d8", "#9cc0ff", "#0a0804", { outline: 0.14, outlineStyle: "ink", frame: 0.8, frameMat: "gold", glow: 0, shine: 0, border: "goldFrame" , ...GEM_SHAPE }),
+    "amethyst-silver": D_("heartcut", "#1e0838", "#8a3ad0", "#e0b4ff", "#0a0a0e", { outline: 0.14, outlineStyle: "ink", frame: 0.75, frameMat: "silver", glow: 0, shine: 0, border: "silverFrame" , ...GEM_SHAPE }),
   },
   armor: {
     galaxy: D_("galaxy", "#18225a", "#5060be", "#bec8ff", "#0a081e"),
@@ -972,6 +972,7 @@ function galaxyOpts(kind, el, tex, seed) {
   if (tex === "starfield") { o.neb = 0.25; o.dens *= 3; o.big *= 2; }
   o.seed = seed; return o;
 }
+const gemCache = new WeakMap();
 function texColor(tex, q) {
   const { X, Y, t, P, el } = q, k = 1 / el.texScale, u = q.ex * k, v = q.ey * k, ph = TAU * t;
   switch (tex) {
@@ -1013,6 +1014,30 @@ function texColor(tex, q) {
     case "hologram": {
       const hp = (u * 0.25 + v * 0.35 + t) * TAU, r = 0.5 + 0.5 * Math.sin(hp), g = 0.5 + 0.5 * Math.sin(hp + 2.1);
       return scale3(mixc(mixc(P.deep, P.cloud, r), P.bright, g * 0.6), 0.86 + 0.14 * Math.sin(Y * TAU * 2));
+    }
+    case "heartcut": {                                     // big triangular facets fanning to the outline's corners
+      const pts = el.custom && el.points && el.points.length >= 3 ? el.points : GEM_HEART;
+      let cache = gemCache.get(pts);
+      if (!cache) {
+        const [ccx, ccy] = ELEM[q.kind].c, fc = [0, 0.45];
+        const vs = pts.filter((_, m) => pts.length < 12 || m % 2 === 0).map(([x, y]) => { const vx = x - ccx - fc[0], vy = y - ccy - fc[1]; return { a: Math.atan2(vy, vx), r: Math.hypot(vx, vy) }; }).sort((m, n) => m.a - n.a);
+        cache = { fc, vs }; gemCache.set(pts, cache);
+      }
+      const { fc, vs } = cache, px = q.ex - fc[0], py = q.ey - fc[1], ang = Math.atan2(py, px), r = Math.hypot(px, py);
+      let i0 = vs.length - 1; for (let m = 0; m < vs.length; m++) if (vs[m].a <= ang) i0 = m;
+      const A = vs[i0], B = vs[(i0 + 1) % vs.length];
+      let span = B.a - A.a; if (span <= 0) span += TAU; let w = ang - A.a; if (w < 0) w += TAU; w = sat(w / span);
+      const rEdge = lerp(A.r, B.r, w) * 0.97, rp = r / Math.max(rEdge, 0.1), inner = rp < 0.5;
+      const mid = A.a + span / 2, la = el.light * Math.PI / 180, h = fract(Math.sin((i0 + (inner ? 31 : 0)) * 78.233) * 43758.5);
+      // inner facets are split along the spoke to the middle of the edge, outer facets tilt outward
+      const sideW = w < 0.5 ? -0.35 : 0.35;
+      const shade = sat(0.44 + (inner ? 0.38 : 0.58) * Math.cos(mid + (inner ? sideW : 0) - la) + 0.2 * (h - 0.5) + (rp - 0.5) * 0.18);
+      let c = shade < 0.5 ? mixc(P.deep, P.cloud, shade * 2) : mixc(P.cloud, P.bright, (shade - 0.5) * 2);
+      const spoke = Math.min(w, 1 - w) * span * r, seam = Math.abs(w - 0.5) * span * r;
+      const lines = Math.max(sstep(0.04, 0, spoke), sstep(0.04, 0, Math.abs(rp - 0.5) * rEdge));
+      c = mixc(c, mixc(P.bright, WHITE, 0.2), lines * 0.18);
+      c = mixc(c, WHITE, sat(shade - 0.86) * 2.2);                                        // glint on the brightest facets
+      return mixc(c, WHITE, Math.max(0, Math.sin(TAU * (t + h))) ** 20 * 0.4);
     }
     case "gem": {                                          // brilliant cut: 10-sided table, then two rings of offset facets
       const r = Math.hypot(u, v), ang = Math.atan2(v, u), n = 10, step = TAU / n, la = el.light * Math.PI / 180;
@@ -1095,7 +1120,7 @@ function elementIcon(kind, S, el, cols, t = 0, mode = "full", flash = false, see
     return base;
   };
   /* thick framed bezel cut into the edge (stone, iron, gold...), lit like a raised ridge */
-  const FRAME = { stone: [rgb(58, 56, 58), rgb(140, 136, 132)], iron: [rgb(52, 56, 64), rgb(168, 174, 186)], gold: [rgb(128, 82, 16), rgb(255, 222, 120)],
+  const FRAME = { stone: [rgb(66, 63, 62), rgb(156, 150, 144)], iron: [rgb(52, 56, 64), rgb(168, 174, 186)], gold: [rgb(128, 82, 16), rgb(255, 222, 120)],
     bronze: [rgb(92, 50, 22), rgb(214, 148, 86)], silver: [rgb(112, 114, 128), rgb(240, 243, 250)], obsidian: [rgb(14, 10, 22), rgb(84, 66, 112)] };
   const applyFrame = (g, u, X, Y, i, j, dim) => {
     const fw = el.frame;
@@ -1110,8 +1135,11 @@ function elementIcon(kind, S, el, cols, t = 0, mode = "full", flash = false, see
     else if (el.frameMat === "obsidian") tone = 0.35 + 0.15 * fbm(seed + 3, X * 5, Y * 5);
     else tone = 0.55 + 0.1 * samp(T[1], X * 6, Y * 6);
     let m = mixc(lo, hi, sat(tone));
-    m = scale3(m, Math.max(0.3, Math.min(1.9, 1 + (el.frameMat === "stone" ? 0.55 : 0.8) * nf * ridge)));
-    m = mixc(m, WHITE, sat(nf * ridge - 0.5) * (el.frameMat === "stone" ? 0.35 : 0.7));            // glint on the lit bevel
+    const flat = el.frameMat === "stone";
+    // stone: a flat, evenly lit face with lit/shaded chamfers only near its two edges; metals: a rounded, shiny ridge
+    const chamfer = flat ? Math.max(sstep(0.3, 0, tq), sstep(0.7, 1, tq)) : 1;
+    m = scale3(m, Math.max(0.3, Math.min(1.9, 1 + (flat ? 0.65 : 0.8) * nf * ridge * chamfer + (flat ? 0.08 : 0))));
+    m = mixc(m, WHITE, sat(nf * ridge * chamfer - 0.5) * (flat ? 0.3 : 0.7));                       // glint on the lit bevel
     if (el.frameMat === "stone") m = mixc(m, scale3(lo, 0.35), sstep(0.07, 0.0, Math.abs(fbm(seed + 21, X * 5, Y * 5))) * 0.85); // cracks
     m = mixc(m, scale3(lo, 0.3), cov(Math.abs(u - fw) - 0.08));                          // dark lip around the inside
     if (dim) m = scale3(m, 0.65);
@@ -1497,7 +1525,7 @@ function wireEditor(key) {
     changed();
   });
   if (key === "heart") $("ed-gemheart").addEventListener("click", () => {
-    Object.assign(st.heart, { custom: true, points: clone(GEM_HEART), smooth: 0.1, posX: 0, posY: 0, size: 1, facets: 0 });
+    Object.assign(st.heart, { custom: true, points: clone(GEM_HEART), smooth: 0.08, posX: 0, posY: 0, size: 1, facets: 0 });
     syncInputs(); changed();
   });
   if (key === "steak") $("ed-bean").addEventListener("click", () => {
