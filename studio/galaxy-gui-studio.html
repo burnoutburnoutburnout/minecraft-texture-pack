@@ -80,6 +80,8 @@ canvas.fit { display: block; width: 100%; height: auto; }
 input[type="range"] { width: 100%; accent-color: var(--accent); }
 .card.meat input[type="range"] { accent-color: var(--meat); }
 .card.xp input[type="range"] { accent-color: var(--xp); }
+.toggle { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; cursor: pointer; }
+.toggle input { width: 18px; height: 18px; accent-color: var(--meat); }
 .colors { display: flex; flex-wrap: wrap; gap: 12px; }
 .swatch { display: grid; gap: 4px; justify-items: start; font-size: 13px; font-weight: 600; }
 .swatch input[type="color"] { width: 64px; height: 36px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2); padding: 2px; cursor: pointer; }
@@ -460,7 +462,7 @@ function pingIcon(S, level) {
    Steak
    ===================================================================== */
 const DESIGNS = {
-  "grill": { b: "rough", lump: [0, 1.6], ryTop: 2.45, lift: 0.75, dip: 0.5 },
+  "grill": { b: "rough", lump: [0, 1.6], arch: 0.25, lift: 0.75, dip: 0.5 },
   "crosshatch": { b: "thick" }, "wide-grill": { b: "lumpy" }, "thin-grill": { b: "thin" },
   "speckle": { b: "soft" }, "chunky": { b: "faceted" }, "grain": { b: "jagged" },
   "charred": { b: "double" }, "char-edges": { b: "wavy" }, "seared": { b: "slab" },
@@ -476,14 +478,26 @@ const BORDERS = {
   wavy: { wave: [0.12, 14], rough: [0.04, 4] }, double: { double: true, rough: [0.08, 4] },
   soft: { outline: 0.3, outlineCol: "#3c1a0e", rough: [0.05, 3] }, slab: { thick: 1.15, rough: [0.1, 4] },
 };
-const SHAPE_BASE = { rough: [0.13, 4], lump: [0.16, 1.6], wave: [0, 0], facets: 0, outline: 0.42, outlineCol: "#120703", double: false, thick: 0.65, lift: 0, ryTop: 2.2, dip: 0 };
+const clone = o => JSON.parse(JSON.stringify(o));
+const TEXTURES = Object.keys(DESIGNS);
+const BORDER_NAMES = { rough: "Rough", thick: "Thick line", thin: "Thin line", lumpy: "Lumpy", jagged: "Jagged", faceted: "Faceted",
+  wavy: "Wavy", double: "Double line", soft: "Soft brown", slab: "Thick slab" };
+const SHAPE_BASE = { texture: "grill", border: "rough", rough: [0.13, 4], lump: [0.16, 1.6], wave: [0, 0], facets: 0, outline: 0.42,
+  outlineCol: "#120703", double: false, thick: 0.65, lift: 0, arch: 0, dip: 0, dipX: 0.15, dipW: 0.55,
+  rx: 3.95, ry: 2.2, p: 2.4, angle: -0.5, texStrength: 1, texScale: 1, burnW: 1, burnAng: 0 };
+const BORDER_KEYS = ["rough", "lump", "wave", "facets", "outline", "outlineCol", "double", "thick"];
+function borderPreset(b) {
+  const o = {}; for (const k of BORDER_KEYS) o[k] = clone(SHAPE_BASE[k]);
+  return Object.assign(o, clone(BORDERS[b] || {}), { border: b });
+}
 function designShape(name) {
-  const d = DESIGNS[name]; return Object.assign({}, SHAPE_BASE, BORDERS[d.b], d, { b: undefined });
+  const d = clone(DESIGNS[name]), sh = Object.assign(clone(SHAPE_BASE), borderPreset(d.b));
+  delete d.b; return Object.assign(sh, d, { texture: name });
 }
 
 function steakGrids(S, sh, drop, seed) {
   const W = 9 * S, H = 9 * S, n = W * H, f = new Float32Array(n), EX = new Float32Array(n), EY = new Float32Array(n), D = new Float32Array(n);
-  const a = -0.5, ca = Math.cos(a), sa = Math.sin(a), rx = 3.95, ry = 2.2, p = 2.4;
+  const a = sh.angle, ca = Math.cos(a), sa = Math.sin(a), rx = sh.rx, ry = sh.ry, p = sh.p;
   let poly = null;
   if (sh.facets) {
     const r = mulberry32(seed * 31 + 13); poly = [];
@@ -501,8 +515,9 @@ function steakGrids(S, sh, drop, seed) {
     if (poly) { EX[k] = ex; EY[k] = ey; D[k] = sdPolygon(X, Y, poly); continue; }
     ey += sh.lift * Math.max(ex / rx, 0) ** 2;
     const lump = sh.lump[0] * Math.sin(ex * sh.lump[1] + 0.4);
-    let ry_ = (ey < 0 ? sh.ryTop : ry) + (ey < 0 ? lump : lump * 0.5);
-    if (sh.dip && ey < 0) ry_ -= sh.dip * Math.exp(-(((ex - 0.15) / 0.55) ** 2));
+    let ry_ = (ey < 0 ? ry + sh.arch : ry) + (ey < 0 ? lump : lump * 0.5);
+    if (sh.dip && ey < 0) ry_ -= sh.dip * Math.exp(-(((ex - sh.dipX) / sh.dipW) ** 2));
+    ry_ = Math.max(ry_, 0.2);
     f[k] = Math.pow(Math.abs(ex / rx) ** p + Math.abs(ey / ry_) ** p, 1 / p) - 1;
     EX[k] = ex; EY[k] = ey;
   }
@@ -536,16 +551,17 @@ function voronoi(u, v, seed) {
   return [f1, f2, hid, ndx, ndy];
 }
 
-const BLACK = rgb(16, 8, 5);
 function steakColors(st) {
-  const b = unhex(st.meat), m = k => [Math.min(1, b[0] * k), Math.min(1, b[1] * k), Math.min(1, b[2] * k)];
-  return { base: b, mid: m(0.875), dark: m(0.59), light: m(1.25), rim: m(1.48), side: m(0.57), side2: m(0.375) };
+  const sc = st.steakCol, b2 = unhex(sc.meat), rim = unhex(sc.rim), side = unhex(sc.side);
+  return { base: b2, mid: scale3(b2, 0.875), dark: unhex(sc.dark), light: mixc(b2, rim, 0.45), rim, side, side2: scale3(side, 0.66) };
 }
 function steakTexture(tex, X, Y, ex, ey, top, C, seed, ctx, cov) {
   const n = fbm(seed, X * 6 + 20, Y * 6 + 60);
   let face = scale3(mixc(C.base, C.mid, sat(0.5 + 0.4 * n)), 1.08 - 0.25 * sat((ey + 1.6) / 3.2));
+  const plain = face, BLACK = ctx.burnCol;
   const burns = (cs, k, w) => {
-    const u = (ex + k * ey) / Math.sqrt(1 + k * k); let b = 0, h = 0;
+    const th = Math.atan(k) + ctx.burnAng, u = ex * Math.cos(th) + ey * Math.sin(th); let b = 0, h = 0;
+    w *= ctx.burnW;
     for (const c of cs) { const ww = w * (1 - 0.45 * sat(Math.abs(ey) / 2)); b = Math.max(b, cov(Math.abs(u - c) - ww)); h = Math.max(h, Math.exp(-(((u - c) / (w * 2.2)) ** 2))); }
     return [b, h];
   };
@@ -587,14 +603,14 @@ function steakTexture(tex, X, Y, ex, ey, top, C, seed, ctx, cov) {
       grill([-1.9, 0.2], -0.9, 0.2); break; }
     case "cel-shaded": { const L = sat(0.5 - ey / 2.6); face = L > 0.6 ? C.light : L > 0.38 ? C.base : C.dark; break; }
   }
-  return face;
+  return mixc(plain, face, ctx.strength);
 }
 
-function steakIcon(S, st, kind = "full", flash = false, hunger = false, design) {
-  const name = design || st.design, sh = design ? designShape(design) : st.shape, C = steakColors(st), seed = 2, cov = covf(S);
+function steakIcon(S, st, kind = "full", flash = false, hunger = false, shOverride) {
+  const sh = shOverride || st.shape, C = steakColors(st), seed = 2, cov = covf(S), tsc = sh.texScale || 1;
   const top = steakGrids(S, sh, 0, seed), side = steakGrids(S, sh, sh.thick, seed);
   const W = 9 * S, H = 9 * S, img = newImg(S, 9, 9), ow = sh.outline;
-  const r = mulberry32(seed + 77), ctx = { specks: [], drops: [] };
+  const r = mulberry32(seed + 77), ctx = { specks: [], drops: [], burnW: sh.burnW, burnAng: sh.burnAng, burnCol: unhex(st.steakCol.burn), strength: sh.texStrength };
   for (let i = 0; i < 70; i++) ctx.specks.push({ x: -3.8 + r() * 7.6, y: -2.2 + r() * 4.4, r: 0.09 + r() * 0.19, c: [C.dark, C.light, scale3(C.dark, 0.85)][i % 3] });
   for (let i = 0; i < 14; i++) ctx.drops.push({ x: -3.3 + r() * 6.6, y: -1.6 + r() * 3.2 });
   const outlineCol = unhex(sh.outlineCol), tintC = unhex(st.hungerTint);
@@ -609,7 +625,7 @@ function steakIcon(S, st, kind = "full", flash = false, hunger = false, design) 
       c = mixc(flash ? rgb(250, 240, 232) : rgb(10, 5, 2), fill, inner);
       c = mixc(c, rgb(22, 13, 9), cov(Math.abs(t) - 0.1) * (sd < 0 ? 1 : 0) * inner);
     } else {
-      let face = steakTexture(sh.texture || name, X, Y, top.EX[k], top.EY[k], t, C, seed, ctx, cov);
+      let face = steakTexture(sh.texture, X / tsc, Y / tsc, top.EX[k] / tsc, top.EY[k] / tsc, t, C, seed, ctx, d => cov(d * tsc));
       const gx = (top.D[j * W + Math.min(i + 1, W - 1)] - top.D[j * W + Math.max(i - 1, 0)]) * S / 2;
       const gy = (top.D[Math.min(j + 1, H - 1) * W + i] - top.D[Math.max(j - 1, 0) * W + i]) * S / 2;
       const facing = -(gx + gy) / Math.SQRT2, edge = sstep(-0.95, -0.3, t);
@@ -654,8 +670,9 @@ function encodePNG(data, w, h) {
    Settings
    ===================================================================== */
 const DEFAULTS = {
-  design: "grill", shape: Object.assign(designShape("grill"), { texture: "grill" }),
-  meat: "#703624", hungerTint: "#64962e",
+  design: "grill", shape: designShape("grill"),
+  steakCol: { meat: "#703624", dark: "#422015", rim: "#a65035", side: "#401f15", burn: "#100805", linked: true },
+  hungerTint: "#64962e",
   heart: { deep: "#1c0e54", cloud: "#5c28c4", bright: "#b05cff", outlineCol: "#0e041e", stars: 1, outline: 0.5, shine: 0.28, speed: 2 },
   poison: { deep: "#0e3c18", cloud: "#329638", bright: "#96f06e" },
   wither: { deep: "#121218", cloud: "#403e4c", bright: "#828092" },
@@ -668,8 +685,7 @@ const DEFAULTS = {
   cross: { col: "#ffffff", len: 4.5, thick: 1.0 },
   res: 256,
 };
-const KEY = "galaxy-gui-studio-v2";
-const clone = o => JSON.parse(JSON.stringify(o));
+const KEY = "galaxy-gui-studio-v3";
 function deepMerge(base, over) {
   for (const k of Object.keys(over || {})) {
     if (over[k] && typeof over[k] === "object" && !Array.isArray(over[k]) && base[k] && typeof base[k] === "object") deepMerge(base[k], over[k]);
@@ -699,11 +715,32 @@ const SPEED = ["", "slow", "calm", "lively", "fast"];
 const C = (path, label) => ({ type: "color", path, label });
 const R = (path, label, min, max, step) => ({ type: "range", path, label, min, max, step });
 const SP = (path, label) => ({ type: "speed", path, label });
+const D = (path, label, min, max, step) => ({ type: "deg", path, label, min, max, step });
+const TG = (path, label) => ({ type: "toggle", path, label });
 const SECTIONS = [
-  { id: "steak", title: "Steak (hunger bar)", cls: "meat", hint: "Pick a design, then shape it. Choosing a design loads its border settings into the sliders.", designs: true, groups: [
-    { controls: [C("meat", "Meat"), C("shape.outlineCol", "Outline"), C("hungerTint", "Hunger effect")] },
-    { controls: [R("shape.dip", "Top dip", 0, 0.9, 0.01), R("shape.lift", "Right end lift", 0, 1.3, 0.01), R("shape.ryTop", "Top arch", 2.0, 2.8, 0.01),
-      R("shape.rough.0", "Edge roughness", 0, 0.25, 0.005), R("shape.outline", "Outline thickness", 0.12, 0.7, 0.01), R("shape.thick", "Steak thickness", 0.3, 1.3, 0.01)] },
+  { id: "steak-design", title: "Steak: start from a design", cls: "meat", chips: "designs",
+    hint: "A design sets the texture, border and shape together. Change any part of it in the cards below.", groups: [] },
+  { id: "steak-texture", title: "Steak texture", cls: "meat", chips: "textures", groups: [
+    { controls: [R("shape.texStrength", "Texture strength", 0, 1, 0.01), R("shape.texScale", "Texture size", 0.5, 2, 0.01),
+      R("shape.burnW", "Burn line width", 0.3, 2.5, 0.01), D("shape.burnAng", "Burn line angle", -1.2, 1.2, 0.01)] },
+  ] },
+  { id: "steak-border", title: "Steak border", cls: "meat", chips: "borders",
+    hint: "Facets above 0 cut the edge into flat sides, which turns off roughness, lumps and ripples.", groups: [
+    { controls: [R("shape.outline", "Outline thickness", 0.1, 0.8, 0.01), R("shape.thick", "Steak thickness", 0.2, 1.4, 0.01),
+      R("shape.rough.0", "Roughness", 0, 0.3, 0.005), R("shape.rough.1", "Roughness detail", 2, 12, 0.1),
+      R("shape.lump.0", "Lumps", 0, 0.5, 0.01), R("shape.lump.1", "Lump count", 0.5, 4, 0.05),
+      R("shape.wave.0", "Ripples", 0, 0.3, 0.005), R("shape.wave.1", "Ripple count", 0, 24, 1),
+      R("shape.facets", "Facets", 0, 24, 1), TG("shape.double", "Inner highlight line")] },
+  ] },
+  { id: "steak-shape", title: "Steak shape", cls: "meat", groups: [
+    { controls: [R("shape.rx", "Length", 2.8, 4.3, 0.01), R("shape.ry", "Width", 1.4, 2.8, 0.01), R("shape.p", "Squareness", 1.6, 4.5, 0.05),
+      D("shape.angle", "Tilt", -1.2, 0.4, 0.01), R("shape.arch", "Top arch", 0, 0.7, 0.01), R("shape.lift", "Right end lift", 0, 1.3, 0.01),
+      R("shape.dip", "Top dip", 0, 0.9, 0.01), R("shape.dipX", "Dip position", -3, 3, 0.05), R("shape.dipW", "Dip width", 0.2, 1.6, 0.01)] },
+  ] },
+  { id: "steak-colors", title: "Steak colours", cls: "meat", groups: [
+    { controls: [C("steakCol.meat", "Meat"), C("steakCol.dark", "Seared"), C("steakCol.rim", "Highlight"), C("steakCol.side", "Side"),
+      C("shape.outlineCol", "Outline"), C("steakCol.burn", "Burn lines"), C("hungerTint", "Hunger effect")] },
+    { controls: [TG("steakCol.linked", "Match seared, highlight and side to the meat colour")] },
   ] },
   { id: "hearts", title: "Hearts", groups: [
     { controls: [C("heart.deep", "Space"), C("heart.cloud", "Nebula"), C("heart.bright", "Glow"), C("heart.outlineCol", "Outline")] },
@@ -731,7 +768,12 @@ const SECTIONS = [
 ];
 const $ = id => document.getElementById(id);
 const idOf = path => "f-" + path.replace(/\./g, "-");
-const fmt = (ctl, v) => ctl.type === "speed" ? SPEED[5 - v] : (+v).toFixed(2);
+const fmt = (ctl, v) => ctl.type === "speed" ? SPEED[5 - v] : ctl.type === "deg" ? Math.round(-v * 180 / Math.PI) + "°" : (+v).toFixed(2);
+const isSteak = path => path.startsWith("shape") || path.startsWith("steakCol");
+function linkShades() {
+  const m = unhex(st.steakCol.meat);
+  st.steakCol.dark = hex(scale3(m, 0.59)); st.steakCol.rim = hex(scale3(m, 1.48)); st.steakCol.side = hex(scale3(m, 0.57));
+}
 const controlsEl = $("controls"), exportCard = $("export-card");
 const allControls = [];
 for (const sec of SECTIONS) {
@@ -740,7 +782,7 @@ for (const sec of SECTIONS) {
   const h = document.createElement("h2"); h.id = "h-" + sec.id;
   const dot = document.createElement("span"); dot.className = "dot" + (sec.cls ? " " + sec.cls : ""); h.append(dot, sec.title); card.appendChild(h);
   if (sec.hint) { const p = document.createElement("p"); p.className = "hint"; p.textContent = sec.hint; card.appendChild(p); }
-  if (sec.designs) { const d = document.createElement("div"); d.className = "designs"; d.id = "designs"; d.setAttribute("role", "group"); d.setAttribute("aria-label", "Steak designs"); card.appendChild(d); }
+  if (sec.chips) { const d = document.createElement("div"); d.className = "designs"; d.id = "chips-" + sec.chips; d.setAttribute("role", "group"); d.setAttribute("aria-label", sec.title); card.appendChild(d); }
   for (const g of sec.groups) {
     if (g.label) { const l = document.createElement("p"); l.className = "group-label"; l.textContent = g.label; card.appendChild(l); }
     const colorsBox = document.createElement("div"); colorsBox.className = "colors";
@@ -750,7 +792,20 @@ for (const sec of SECTIONS) {
       if (ctl.type === "color") {
         const lab = document.createElement("label"); lab.className = "swatch"; lab.htmlFor = id; lab.textContent = ctl.label;
         const inp = document.createElement("input"); inp.type = "color"; inp.id = id; lab.appendChild(inp); colorsBox.appendChild(lab);
-        inp.addEventListener("input", () => { setP(ctl.path, inp.value); changed(ctl.path === "meat" || ctl.path === "shape.outlineCol"); });
+        inp.addEventListener("input", () => {
+          setP(ctl.path, inp.value);
+          if (ctl.path === "steakCol.meat" && st.steakCol.linked) { linkShades(); syncInputs(); }
+          else if (["steakCol.dark", "steakCol.rim", "steakCol.side"].includes(ctl.path)) { st.steakCol.linked = false; syncInputs(); }
+          changed(isSteak(ctl.path));
+        });
+      } else if (ctl.type === "toggle") {
+        const f = document.createElement("label"); f.className = "toggle"; f.htmlFor = id;
+        const inp = document.createElement("input"); inp.type = "checkbox"; inp.id = id; f.append(inp, ctl.label); slidersBox.appendChild(f);
+        inp.addEventListener("change", () => {
+          setP(ctl.path, inp.checked);
+          if (ctl.path === "steakCol.linked" && inp.checked) { linkShades(); syncInputs(); }
+          changed(isSteak(ctl.path));
+        });
       } else {
         const f = document.createElement("div"); f.className = "field";
         const lab = document.createElement("label"); lab.htmlFor = id; lab.textContent = ctl.label;
@@ -760,7 +815,7 @@ for (const sec of SECTIONS) {
         f.append(lab, inp); slidersBox.appendChild(f);
         inp.addEventListener("input", () => {
           const v = +inp.value; setP(ctl.path, ctl.type === "speed" ? 5 - v : v); out.textContent = fmt(ctl, ctl.type === "speed" ? 5 - v : v);
-          changed(false);
+          changed(isSteak(ctl.path));
         });
       }
       allControls.push(ctl);
@@ -774,22 +829,35 @@ function syncInputs() {
   for (const ctl of allControls) {
     const v = getP(ctl.path), inp = $(idOf(ctl.path));
     if (ctl.type === "color") inp.value = v;
+    else if (ctl.type === "toggle") inp.checked = !!v;
     else { inp.value = ctl.type === "speed" ? 5 - v : v; $(idOf(ctl.path) + "-o").textContent = fmt(ctl, v); }
   }
-  for (const b of $("designs").children) b.setAttribute("aria-pressed", String(b.id === "d-" + st.design));
+  for (const b of $("chips-designs").children) b.setAttribute("aria-pressed", String(b.dataset.name === st.design));
+  for (const b of $("chips-textures").children) b.setAttribute("aria-pressed", String(b.dataset.name === st.shape.texture));
+  for (const b of $("chips-borders").children) b.setAttribute("aria-pressed", String(b.dataset.name === st.shape.border));
   $("r256").setAttribute("aria-pressed", String(st.res === 256)); $("r512").setAttribute("aria-pressed", String(st.res === 512));
 }
 
-/* steak design thumbnails */
-const thumbs = {};
-for (const name of Object.keys(DESIGNS)) {
-  const b = document.createElement("button"); b.type = "button"; b.className = "design"; b.id = "d-" + name;
-  const c = document.createElement("canvas"); c.width = 112; c.height = 112; b.appendChild(c);
-  const s = document.createElement("span"); s.textContent = name; b.appendChild(s);
-  b.addEventListener("click", () => { st.design = name; st.shape = Object.assign(designShape(name), { texture: name }); syncInputs(); changed(true); });
-  $("designs").appendChild(b); thumbs[name] = c;
+/* steak chips: designs, textures and borders, each drawn with the current steak */
+const chipSets = {
+  designs: { names: Object.keys(DESIGNS), label: n => n, shape: n => designShape(n),
+    pick: n => { st.design = n; st.shape = designShape(n); } },
+  textures: { names: TEXTURES, label: n => n, shape: n => Object.assign(clone(st.shape), { texture: n }),
+    pick: n => { st.shape.texture = n; } },
+  borders: { names: Object.keys(BORDERS), label: n => BORDER_NAMES[n], shape: n => Object.assign(clone(st.shape), borderPreset(n)),
+    pick: n => { Object.assign(st.shape, borderPreset(n)); } },
+};
+const thumbs = [];
+for (const [set, cfg] of Object.entries(chipSets)) {
+  for (const name of cfg.names) {
+    const b = document.createElement("button"); b.type = "button"; b.className = "design"; b.dataset.name = name;
+    const c = document.createElement("canvas"); c.width = 112; c.height = 112; b.appendChild(c);
+    const s = document.createElement("span"); s.textContent = cfg.label(name); b.appendChild(s);
+    b.addEventListener("click", () => { cfg.pick(name); syncInputs(); changed(true); });
+    $("chips-" + set).appendChild(b); thumbs.push([c, () => cfg.shape(name)]);
+  }
 }
-function drawThumbs() { for (const [name, c] of Object.entries(thumbs)) { const g = c.getContext("2d"); g.clearRect(0, 0, 112, 112); g.drawImage(toCanvas(steakIcon(12, st, "full", false, false, name)), 2, 2); } }
+function drawThumbs() { for (const [c, shp] of thumbs) { const g = c.getContext("2d"); g.clearRect(0, 0, 112, 112); g.drawImage(toCanvas(steakIcon(12, st, "full", false, false, shp())), 2, 2); } }
 
 /* =====================================================================
    Preview
@@ -851,7 +919,7 @@ requestAnimationFrame(drawHud);
 let timer = null;
 function changed(thumbsToo) {
   save(); clearTimeout(timer);
-  timer = setTimeout(() => { buildPreview(); if (thumbsToo) drawThumbs(); }, 90);
+  timer = setTimeout(() => { buildPreview(); if (thumbsToo) drawThumbs(); }, 120);
 }
 $("r256").addEventListener("click", () => { st.res = 256; syncInputs(); save(); });
 $("r512").addEventListener("click", () => { st.res = 512; syncInputs(); save(); });
