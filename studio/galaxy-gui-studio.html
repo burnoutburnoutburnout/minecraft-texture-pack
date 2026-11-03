@@ -818,6 +818,10 @@ const EL_DEFAULTS = {
   bar: Object.assign(clone(EL_COMMON), { c1: "#0a1e58", c2: "#246ed6", c3: "#6ee8ff", outlineCol: "#060c22", bgCol: "#08081a",
     outline: 0.45, shine: 0.06, shineX: 0, shineY: -1.25, barH: 5, radius: 1.6, slant: 0, taper: 0, segments: 0, segGap: 0.6 }),
 };
+/* angular, gem-cut heart outline: straight sides, chamfered lobes and a sharp V notch */
+const GEM_HEART = [[4.5, 2.35], [5.35, 1.35], [6.55, 0.8], [7.85, 1.15], [8.6, 2.25], [8.65, 3.75], [7.95, 5.1], [6.3, 6.85], [4.5, 8.45],
+  [2.7, 6.85], [1.05, 5.1], [0.35, 3.75], [0.4, 2.25], [1.15, 1.15], [2.45, 0.8], [3.65, 1.35]];
+const GEM_SHAPE = { custom: true, points: GEM_HEART, smooth: 0.1 };
 const D_ = (texture, c1, c2, c3, outlineCol, extra = {}) => Object.assign({ texture, c1, c2, c3, outlineCol }, extra);
 const EL_DESIGNS = {
   heart: {
@@ -833,10 +837,10 @@ const EL_DESIGNS = {
     plasma: D_("plasma", "#1a0040", "#ff2fa0", "#ffe14d", "#0a0018"),
     marble: D_("marble", "#3a1c4a", "#e9dff2", "#ffffff", "#1c0d24", { glow: 0, shine: 0.35 }),
     aurora: D_("aurora", "#04122a", "#22e0a0", "#a070ff", "#020a18"),
-    "ruby-stone": D_("gem", "#3a0209", "#c8102e", "#ff8a98", "#0a0606", { outline: 0.14, outlineStyle: "ink", frame: 1.1, frameMat: "stone", rough: [0.035, 6], glow: 0, shine: 0.3, border: "stoneFrame" }),
-    "emerald-iron": D_("gem", "#032a14", "#14a050", "#9cffc4", "#0a0a0a", { outline: 0.14, outlineStyle: "ink", frame: 1.0, frameMat: "iron", glow: 0, shine: 0.3, border: "ironFrame" }),
-    "sapphire-gold": D_("gem", "#06123e", "#2050d8", "#9cc0ff", "#0a0804", { outline: 0.14, outlineStyle: "ink", frame: 1.0, frameMat: "gold", glow: 0, shine: 0.3, border: "goldFrame" }),
-    "amethyst-silver": D_("gem", "#1e0838", "#8a3ad0", "#e0b4ff", "#0a0a0e", { outline: 0.14, outlineStyle: "ink", frame: 0.9, frameMat: "silver", glow: 0, shine: 0.3, border: "silverFrame" }),
+    "ruby-stone": D_("gem", "#3a0209", "#c8102e", "#ff8a98", "#0a0606", { outline: 0.14, outlineStyle: "ink", frame: 1.1, frameMat: "stone", rough: [0.035, 6], glow: 0, shine: 0.3, border: "stoneFrame" , ...GEM_SHAPE }),
+    "emerald-iron": D_("gem", "#032a14", "#14a050", "#9cffc4", "#0a0a0a", { outline: 0.14, outlineStyle: "ink", frame: 1.0, frameMat: "iron", glow: 0, shine: 0.3, border: "ironFrame" , ...GEM_SHAPE }),
+    "sapphire-gold": D_("gem", "#06123e", "#2050d8", "#9cc0ff", "#0a0804", { outline: 0.14, outlineStyle: "ink", frame: 1.0, frameMat: "gold", glow: 0, shine: 0.3, border: "goldFrame" , ...GEM_SHAPE }),
+    "amethyst-silver": D_("gem", "#1e0838", "#8a3ad0", "#e0b4ff", "#0a0a0e", { outline: 0.14, outlineStyle: "ink", frame: 0.9, frameMat: "silver", glow: 0, shine: 0.3, border: "silverFrame" , ...GEM_SHAPE }),
   },
   armor: {
     galaxy: D_("galaxy", "#18225a", "#5060be", "#bec8ff", "#0a081e"),
@@ -1417,7 +1421,8 @@ function makeEditor(key) {
       <p class="hint" id="ed-hint-${key}"></p>
       <div class="export-row"><button type="button" class="btn" id="ed-restart-${key}">Restart from slider shape</button>
       <button type="button" class="btn" id="ed-more-${key}">More dots</button><button type="button" class="btn" id="ed-fewer-${key}">Fewer dots</button>
-      ${key === "steak" ? `<button type="button" class="btn" id="ed-bean">Use the cleaned-up bean shape</button>` : ""}</div>
+      ${key === "steak" ? `<button type="button" class="btn" id="ed-bean">Use the cleaned-up bean shape</button>` : ""}
+      ${key === "heart" ? `<button type="button" class="btn" id="ed-gemheart">Use the gem-cut heart shape</button>` : ""}</div>
     </div>`;
   edState[key] = { drag: -1, fast: false };
   return box;
@@ -1490,6 +1495,10 @@ function wireEditor(key) {
     const el = E.el(), P = el.points; if (P.length >= 48) return;
     el.points = P.flatMap((p, i) => { const q = P[(i + 1) % P.length]; return [p, [+((p[0] + q[0]) / 2).toFixed(3), +((p[1] + q[1]) / 2).toFixed(3)]]; });
     changed();
+  });
+  if (key === "heart") $("ed-gemheart").addEventListener("click", () => {
+    Object.assign(st.heart, { custom: true, points: clone(GEM_HEART), smooth: 0.1, posX: 0, posY: 0, size: 1, facets: 0 });
+    syncInputs(); changed();
   });
   if (key === "steak") $("ed-bean").addEventListener("click", () => {
     Object.assign(st.shape, { custom: true, points: clone(BEAN_POINTS), smooth: 1, rotate: 0.12, posX: 0, posY: 0, size: 1, facets: 0 });
