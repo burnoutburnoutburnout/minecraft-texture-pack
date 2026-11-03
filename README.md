@@ -4,10 +4,10 @@
 
 A HUD pack for **Minecraft 1.8.9** with:
 
-- **Animated galaxy hearts**: a spinning purple/magenta spiral galaxy with twinkling stars inside every heart. Hardcore hearts animate too.
-- **Steak hunger bar**: seared steaks with grill marks replace the drumsticks. There are also matching "hunger effect" (green) and flashing variants.
-- **Animated galaxy XP bar**: a teal/violet nebula that flows along the bar. It uses the same stars and violet tones as the hearts, but its colours and movement are different.
-- Matching galaxy armor, air bubbles, boss bar, horse-jump bar, tab-list ping icons and crosshair.
+- **Animated galaxy hearts**: pixel-art hearts filled with a deep-space starfield (dark indigo, purple nebula clouds, twinkling stars) that slowly drifts. Hardcore hearts animate too.
+- **Steak hunger bar**: pixel-art cooked steaks replace the drumsticks. There are also matching "hunger effect" (green) and flashing variants.
+- **Animated galaxy XP bar**: the same starfield style shifted to blue/cyan, with nebula clouds that flow along the bar.
+- Matching galaxy armor, plus air bubbles, boss bar, horse-jump bar, tab-list ping icons and crosshair.
 
 It comes in two resolutions:
 
