@@ -763,8 +763,8 @@ const ELEM = {
   armor: { w: 9, h: 9, c: [4.5, 4.55], R: 6.5 },
   bar: { w: 182, h: 5, c: [91, 2.5], R: 0 },
 };
-const EL_TEXTURES = ["galaxy", "nebula", "starfield", "aurora", "crystal", "glossy", "solid", "gradient", "metal", "lava", "ice", "marble", "hologram", "plasma"];
-const EL_TEX_LABEL = { galaxy: "Galaxy", nebula: "Nebula", starfield: "Starfield", aurora: "Aurora", crystal: "Crystal", glossy: "Glossy", solid: "Solid",
+const EL_TEXTURES = ["gem", "galaxy", "nebula", "starfield", "aurora", "crystal", "glossy", "solid", "gradient", "metal", "lava", "ice", "marble", "hologram", "plasma"];
+const EL_TEX_LABEL = { gem: "Cut gem", galaxy: "Galaxy", nebula: "Nebula", starfield: "Starfield", aurora: "Aurora", crystal: "Crystal", glossy: "Glossy", solid: "Solid",
   gradient: "Gradient", metal: "Metal", lava: "Lava", ice: "Ice", marble: "Marble", hologram: "Hologram", plasma: "Plasma" };
 const EL_BORDERS = {
   clean: { label: "Clean" }, thin: { label: "Thin line", outline: 0.25 }, thick: { label: "Thick line", outline: 0.8 },
@@ -791,16 +791,22 @@ const EL_BORDERS = {
   comic: { label: "Comic", outline: 0.75, outlineStyle: "ink", double: true },
   glass: { label: "Glass", outline: 0.2, outlineStyle: "light", bevel: 0.8, glowOut: 0.3 },
   frost: { label: "Frost", outline: 0.4, outlineStyle: "frost", rough: [0.05, 10], glowOut: 0.4, glowCol: "white" },
+  stoneFrame: { label: "Stone frame", outline: 0.14, outlineStyle: "ink", frame: 1.1, frameMat: "stone", rough: [0.035, 6] },
+  ironFrame: { label: "Iron frame", outline: 0.14, outlineStyle: "ink", frame: 1.0, frameMat: "iron" },
+  goldFrame: { label: "Gold frame", outline: 0.14, outlineStyle: "ink", frame: 1.0, frameMat: "gold" },
+  bronzeFrame: { label: "Bronze frame", outline: 0.14, outlineStyle: "ink", frame: 1.0, frameMat: "bronze" },
+  silverFrame: { label: "Silver frame", outline: 0.14, outlineStyle: "ink", frame: 0.9, frameMat: "silver" },
+  obsidianFrame: { label: "Obsidian frame", outline: 0.14, outlineStyle: "ink", frame: 1.0, frameMat: "obsidian" },
 };
 /* borders that need room outside the shape (bars fill their whole row, so they are skipped there) */
 const EL_OUTSIDE_BORDERS = ["faceted", "slab", "neon", "halo", "sticker", "ring", "shadow", "glass", "frost"];
 const EL_BORDER_KEYS = ["outline", "rough", "wave", "facets", "double", "thick", "outlineStyle", "glowOut", "glowCol", "ring", "dash", "stitch",
-  "bevel", "sticker", "feather", "drop", "waveType"];
+  "bevel", "sticker", "feather", "drop", "waveType", "frame", "frameMat"];
 
 const EL_COMMON = {
   design: "galaxy", texture: "galaxy", stars: 1, texScale: 1, texStrength: 1, speed: 2, glow: 0.32,
   border: "clean", outline: 0.5, rough: [0, 4], wave: [0, 0], facets: 0, double: false, thick: 0,
-  outlineStyle: "solid", glowOut: 0, glowCol: "main", ring: 0, dash: 0, stitch: 0, bevel: 0, sticker: 0, feather: 0, drop: 0, waveType: "sine",
+  outlineStyle: "solid", glowOut: 0, glowCol: "main", ring: 0, dash: 0, stitch: 0, bevel: 0, sticker: 0, feather: 0, drop: 0, waveType: "sine", frame: 0, frameMat: "stone",
   posX: 0, posY: 0, size: 1, tilt: 0, custom: false, points: [], smooth: 0.85,
   light: 225, shade: 1, falloff: 0, rimLight: 0, rimShadow: 0, shine: 0.28, shineSize: 1, shineX: -1.9, shineY: -1.74,
 };
@@ -827,6 +833,10 @@ const EL_DESIGNS = {
     plasma: D_("plasma", "#1a0040", "#ff2fa0", "#ffe14d", "#0a0018"),
     marble: D_("marble", "#3a1c4a", "#e9dff2", "#ffffff", "#1c0d24", { glow: 0, shine: 0.35 }),
     aurora: D_("aurora", "#04122a", "#22e0a0", "#a070ff", "#020a18"),
+    "ruby-stone": D_("gem", "#3a0209", "#c8102e", "#ff8a98", "#0a0606", { outline: 0.14, outlineStyle: "ink", frame: 1.1, frameMat: "stone", rough: [0.035, 6], glow: 0, shine: 0.3, border: "stoneFrame" }),
+    "emerald-iron": D_("gem", "#032a14", "#14a050", "#9cffc4", "#0a0a0a", { outline: 0.14, outlineStyle: "ink", frame: 1.0, frameMat: "iron", glow: 0, shine: 0.3, border: "ironFrame" }),
+    "sapphire-gold": D_("gem", "#06123e", "#2050d8", "#9cc0ff", "#0a0804", { outline: 0.14, outlineStyle: "ink", frame: 1.0, frameMat: "gold", glow: 0, shine: 0.3, border: "goldFrame" }),
+    "amethyst-silver": D_("gem", "#1e0838", "#8a3ad0", "#e0b4ff", "#0a0a0e", { outline: 0.14, outlineStyle: "ink", frame: 0.9, frameMat: "silver", glow: 0, shine: 0.3, border: "silverFrame" }),
   },
   armor: {
     galaxy: D_("galaxy", "#18225a", "#5060be", "#bec8ff", "#0a081e"),
@@ -1000,6 +1010,23 @@ function texColor(tex, q) {
       const hp = (u * 0.25 + v * 0.35 + t) * TAU, r = 0.5 + 0.5 * Math.sin(hp), g = 0.5 + 0.5 * Math.sin(hp + 2.1);
       return scale3(mixc(mixc(P.deep, P.cloud, r), P.bright, g * 0.6), 0.86 + 0.14 * Math.sin(Y * TAU * 2));
     }
+    case "gem": {                                          // brilliant cut: 10-sided table, then two rings of offset facets
+      const r = Math.hypot(u, v), ang = Math.atan2(v, u), n = 10, step = TAU / n, la = el.light * Math.PI / 180;
+      const R0 = q.kind === "bar" ? 2.2 : 3.6;
+      const sidA = Math.floor((ang + Math.PI) / step), acA = (sidA + 0.5) * step - Math.PI;
+      const rp = r * Math.cos(ang - acA) / R0;                           // distance to the table's flat sides
+      const ring = rp < 0.26 ? 0 : rp < 0.58 ? 1 : 2;
+      const off = ring === 1 ? 0.5 : 0, sid = Math.floor((ang + Math.PI) / step + off), ac = (sid + 0.5 - off) * step - Math.PI;
+      const h = fract(Math.sin(sid * 91.7 + ring * 13.3) * 4375.85);
+      const tilt = ring === 0 ? 0 : ring === 1 ? 0.5 : 0.85;
+      const shade = sat(0.5 + tilt * 0.5 * Math.cos(ac - la) + 0.22 * (h - 0.5) + (ring === 0 ? 0.12 : 0));
+      let c = shade < 0.5 ? mixc(P.deep, P.cloud, shade * 2) : mixc(P.cloud, P.bright, (shade - 0.5) * 2);
+      const e1 = Math.abs(fract((ang + Math.PI) / step + off) - 0.5) * 2;
+      const line = Math.max(ring ? sstep(0.92, 0.99, e1) : 0, sstep(0.025, 0, Math.min(Math.abs(rp - 0.26), Math.abs(rp - 0.58))));
+      c = mixc(c, mixc(P.bright, WHITE, 0.45), line * 0.55);
+      c = mixc(c, WHITE, Math.max(0, Math.sin(TAU * (t + h))) ** 18 * 0.55);
+      return c;
+    }
     case "plasma": {
       const a = Math.sin(u * 1.3 + ph) + Math.sin(v * 1.7 - ph) + Math.sin((u + v) * 0.9 + ph * 2) + Math.sin(Math.hypot(u, v) * 1.5 - ph);
       const w = 0.5 + 0.5 * Math.sin(a * 1.4); return mixc(mixc(P.deep, P.cloud, sat(w * 2)), P.bright, sat(w * 2 - 1));
@@ -1062,6 +1089,29 @@ function elementIcon(kind, S, el, cols, t = 0, mode = "full", flash = false, see
         return [0.5 + 0.5 * Math.cos(TAU * hh), 0.5 + 0.5 * Math.cos(TAU * (hh - 1 / 3)), 0.5 + 0.5 * Math.cos(TAU * (hh - 2 / 3))]; }
     }
     return base;
+  };
+  /* thick framed bezel cut into the edge (stone, iron, gold...), lit like a raised ridge */
+  const FRAME = { stone: [rgb(58, 56, 58), rgb(140, 136, 132)], iron: [rgb(52, 56, 64), rgb(168, 174, 186)], gold: [rgb(128, 82, 16), rgb(255, 222, 120)],
+    bronze: [rgb(92, 50, 22), rgb(214, 148, 86)], silver: [rgb(112, 114, 128), rgb(240, 243, 250)], obsidian: [rgb(14, 10, 22), rgb(84, 66, 112)] };
+  const applyFrame = (g, u, X, Y, i, j, dim) => {
+    const fw = el.frame;
+    if (u > fw) return scale3(g, 1 - 0.45 * Math.exp(-(u - fw) / 0.28));              // the frame's shadow on the inside
+    const gx = (D[j * W + Math.min(i + 1, W - 1)] - D[j * W + Math.max(i - 1, 0)]) * S / 2;
+    const gy = (D[Math.min(j + 1, H - 1) * W + i] - D[Math.max(j - 1, 0) * W + i]) * S / 2;
+    const nf = gx * lc + gy * ls, tq = sat(u / fw), ridge = Math.cos(Math.PI * tq);
+    const [lo, hi] = FRAME[el.frameMat] || FRAME.stone;
+    let tone = 0.5;
+    if (el.frameMat === "stone") tone = 0.45 + 0.45 * fbm(seed + 9, X * 7, Y * 7) + 0.2 * samp(T[1], X * 40, Y * 40) - 0.45 * sstep(1.2, 1.7, samp(T[3], X * 26, Y * 26));
+    else if (el.frameMat === "iron" || el.frameMat === "silver") tone = 0.5 + 0.12 * samp(T[2], X * 25, Y * 3) + 0.08 * samp(T[4], X * 12, Y * 12);
+    else if (el.frameMat === "obsidian") tone = 0.35 + 0.15 * fbm(seed + 3, X * 5, Y * 5);
+    else tone = 0.55 + 0.1 * samp(T[1], X * 6, Y * 6);
+    let m = mixc(lo, hi, sat(tone));
+    m = scale3(m, Math.max(0.3, Math.min(1.9, 1 + (el.frameMat === "stone" ? 0.55 : 0.8) * nf * ridge)));
+    m = mixc(m, WHITE, sat(nf * ridge - 0.5) * (el.frameMat === "stone" ? 0.35 : 0.7));            // glint on the lit bevel
+    if (el.frameMat === "stone") m = mixc(m, scale3(lo, 0.35), sstep(0.07, 0.0, Math.abs(fbm(seed + 21, X * 5, Y * 5))) * 0.85); // cracks
+    m = mixc(m, scale3(lo, 0.3), cov(Math.abs(u - fw) - 0.08));                          // dark lip around the inside
+    if (dim) m = scale3(m, 0.65);
+    return mixc(g, m, cov(u - fw));
   };
   for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
     const k = j * W + i, d = D[k], ds = DS ? DS[k] : Infinity, body = Math.min(d, ds);
@@ -1126,10 +1176,12 @@ function elementIcon(kind, S, el, cols, t = 0, mode = "full", flash = false, see
           const ang = kind === "bar" ? X * 0.5 : Math.atan2(Y - oy, X - ox) * el.stitch;
           g = mixc(g, mixc(P.bright, WHITE, 0.5), cov(Math.abs(d + ow + 0.32) - 0.06) * sstep(0.1, 0.4, Math.sin(ang)) * 0.9);
         }
+        if (el.frame > 0) g = applyFrame(g, -body, X, Y, i, j, false);
         if (DS && d >= 0) g = mixc(scale3(P.deep, 0.75), scale3(P.dark, 0.9), sat((X - ox + 4) / 8));
         if (DS) g = mixc(g, scale3(P.dark, 0.6), cov(Math.abs(d) - 0.07) * (ds < 0 ? 1 : 0));
         if (flash) g = mixc(g, WHITE, 0.4);
       }
+      if (mode === "container" && el.frame > 0) g = applyFrame(g, -body, X, Y, i, j, true);
       if (el.double && mode !== "container") g = mixc(g, mixc(P.bright, WHITE, 0.2), cov(Math.abs(body + ow + 0.12) - 0.05) * 0.85);
       let out = flash ? rgb(250, 244, 255) : mode === "container" ? unhex(el.emptyOutline || "#040208") : outCol;
       if (!flash && mode !== "container" && el.outlineStyle !== "solid") {
@@ -1255,7 +1307,8 @@ function elSections(key, kind, name, cls) {
     SEL(p("outlineStyle"), "Outline style", [["solid", "Solid colour"], ["gradient", "Shaded"], ["light", "Bright"], ["ink", "Ink black"],
       ["gold", "Gold"], ["silver", "Silver"], ["rainbow", "Rainbow"], ["frost", "Frost"]]),
     R(p("dash"), "Dashes", 0, 30, 1), R(p("stitch"), "Stitches", 0, 30, 1), R(p("bevel"), "Bevel (negative = inset)", -1.5, 1.5, 0.01),
-    R(p("feather"), "Soft edge", 0, 1.2, 0.01));
+    R(p("feather"), "Soft edge", 0, 1.2, 0.01), R(p("frame"), "Frame width", 0, 2.2, 0.01),
+    SEL(p("frameMat"), "Frame material", [["stone", "Stone"], ["iron", "Iron"], ["gold", "Gold"], ["bronze", "Bronze"], ["silver", "Silver"], ["obsidian", "Obsidian"]]));
   if (kind !== "bar") borderCtl.push(R(p("glowOut"), "Outer glow", 0, 1.5, 0.01),
     SEL(p("glowCol"), "Glow colour", [["main", "Highlight colour"], ["white", "White"], ["outline", "Outline colour"]]),
     R(p("sticker"), "Sticker border", 0, 0.8, 0.01), R(p("ring"), "Outer ring gap", 0, 0.8, 0.01), R(p("drop"), "Drop shadow", 0, 1, 0.01));
@@ -1547,7 +1600,7 @@ const chipSets = {
     pick: n => { Object.assign(st.shape, borderPreset(n)); }, sel: () => st.shape.border },
 };
 for (const [key, kind] of [["heart", "heart"], ["armor", "armor"], ["xp", "bar"]]) {
-  chipSets["designs-" + key] = { tab: key, kind, names: Object.keys(EL_DESIGNS[kind]), label: cap, render: n => elThumb(kind, applyElDesign(kind, {}, n)),
+  chipSets["designs-" + key] = { tab: key, kind, names: Object.keys(EL_DESIGNS[kind]), label: n => cap(n.replace("-", " in ")), render: n => elThumb(kind, applyElDesign(kind, {}, n)),
     pick: n => applyElDesign(kind, st[key], n), sel: () => st[key].design };
   chipSets["textures-" + key] = { tab: key, kind, names: EL_TEXTURES, label: n => EL_TEX_LABEL[n], render: n => elThumb(kind, Object.assign(clone(st[key]), { texture: n })),
     pick: n => { st[key].texture = n; }, sel: () => st[key].texture };
