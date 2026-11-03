@@ -436,7 +436,7 @@ const SHAPE_BASE = { texture: "grill", border: "rough", rough: [0.13, 4], lump: 
   outlineCol: "#120703", double: false, thick: 0.65, lift: 0, arch: 0, dip: 0, dipX: 0.15, dipW: 0.55,
   rx: 3.95, ry: 2.2, p: 2.4, angle: -0.5, texStrength: 1, texScale: 1, burnW: 1, burnAng: 0,
   posX: 0, posY: 0, size: 1, bend: 0, taper: 0, liftL: 0, bulge: 0, dipB: 0, dipBX: 0, dipBW: 0.6,
-  custom: false, points: [], smooth: 0.85,
+  custom: false, points: [], smooth: 0.85, rotate: 0,
   burnCount: 0, burnSpacing: 1, burnOffset: 0, burnHalo: 1, cross: false,
   light: 225, shade: 1, rimLight: 1, rimShadow: 1, shine: 0, shineSize: 1, shineX: -1.8 };
 const BORDER_KEYS = ["rough", "lump", "wave", "facets", "outline", "outlineCol", "double", "thick"];
@@ -478,11 +478,20 @@ function customPoly(sh, drop) {
         const cat = 0.5 * (2 * p1[c] + (-p0[c] + p2[c]) * t + (2 * p0[c] - 5 * p1[c] + 4 * p2[c] - p3[c]) * t2 + (-p0[c] + 3 * p1[c] - 3 * p2[c] + p3[c]) * t3);
         pt[c] = lerp(p1[c] + (p2[c] - p1[c]) * t, cat, s);
       }
-      const w = toWorld(sh, pt[0], pt[1]); out.push([w[0], w[1] + drop * sh.size]);
+      const r = rotPt(sh, pt[0], pt[1]), w = toWorld(sh, r[0], r[1]); out.push([w[0], w[1] + drop * sh.size]);
     }
   }
   return out;
 }
+/* "Rotate outline" turns a drawn outline around the icon centre. */
+function rotPt(sh, x, y, inv = false) {
+  const a = (sh.rotate || 0) * (inv ? -1 : 1), c = Math.cos(a), s = Math.sin(a), dx = x - 4.5, dy = y - 4.2;
+  return [4.5 + dx * c - dy * s, 4.2 + dx * s + dy * c];
+}
+/* A cleaned-up kidney-bean steak: big rounded lobe top right, smaller lobe bottom left,
+   a soft dip on the top-left edge, and wide enough to overlap its neighbours in the bar. */
+const BEAN_POINTS = [[0.25, 6.15], [0.75, 4.75], [1.95, 3.95], [3.15, 3.55], [3.85, 2.3], [4.95, 1.0], [6.5, 0.45],
+  [7.95, 0.9], [8.8, 2.25], [8.75, 4.05], [7.8, 5.7], [6.15, 7.0], [4.3, 7.85], [2.45, 8.1], [0.95, 7.45]];
 /* Sample the slider shape's outline into editable points. */
 function shapeToPoints(sh, n = 12) {
   const pts = [];
@@ -1180,7 +1189,7 @@ const SECTIONS = [
     hint: "Use the sliders, or switch to Draw my own and drag the dots. The dashed square is the edge of the icon.", groups: [
     { label: "Position & size", controls: [R("shape.posX", "Move left / right", -3, 3, 0.01), R("shape.posY", "Move up / down", -3, 3, 0.01),
       R("shape.size", "Size", 0.4, 1.6, 0.01), D("shape.angle", "Tilt", -1.57, 1.57, 0.01)] },
-    { label: "Draw my own", controls: [R("shape.smooth", "Corner smoothness", 0, 1, 0.01)] },
+    { label: "Draw my own", controls: [R("shape.smooth", "Corner smoothness", 0, 1, 0.01), D("shape.rotate", "Rotate outline", -1.2, 1.2, 0.01)] },
     { label: "Body (slider shape)", controls: [R("shape.rx", "Length", 1.5, 4.6, 0.01), R("shape.ry", "Width", 0.8, 3.6, 0.01),
       R("shape.p", "Squareness", 1.2, 6, 0.05), R("shape.bend", "Bend", -1.5, 1.5, 0.01), R("shape.taper", "Taper", -0.8, 0.8, 0.01),
       R("shape.liftL", "Left end lift", -1.5, 1.8, 0.01), R("shape.lift", "Right end lift", -1.5, 1.8, 0.01)] },
@@ -1213,7 +1222,8 @@ const $ = id => document.getElementById(id);
 /* ---------- outline editors (steak, hearts, armor) ---------- */
 const ED = 720, EDS = 40;          // canvas px, render scale (base px -> 360 px, drawn at 2x)
 const EDIT = {
-  steak: { label: "Steak", el: () => st.shape, world: (x, y) => toWorld(st.shape, x, y), design: (x, y) => toDesign(st.shape, x, y),
+  steak: { label: "Steak", el: () => st.shape, world: (x, y) => { const r = rotPt(st.shape, x, y); return toWorld(st.shape, r[0], r[1]); },
+    design: (x, y) => { const d = toDesign(st.shape, x, y); return rotPt(st.shape, d[0], d[1], true); },
     sample: n => shapeToPoints(st.shape, n), render: S => steakIcon(S, st, "full") },
   heart: { label: "Heart", el: () => st.heart, world: (x, y) => elWorld("heart", st.heart, x, y), design: (x, y) => elDesign("heart", st.heart, x, y),
     sample: n => elSamplePoints("heart", st.heart, n), render: S => HRT(S, 0.1) },
@@ -1228,7 +1238,8 @@ function makeEditor(key) {
       <div class="seg" role="group" aria-label="Shape mode"><button type="button" id="m-sliders-${key}">Slider shape</button><button type="button" id="m-custom-${key}">Draw my own</button></div>
       <p class="hint" id="ed-hint-${key}"></p>
       <div class="export-row"><button type="button" class="btn" id="ed-restart-${key}">Restart from slider shape</button>
-      <button type="button" class="btn" id="ed-more-${key}">More dots</button><button type="button" class="btn" id="ed-fewer-${key}">Fewer dots</button></div>
+      <button type="button" class="btn" id="ed-more-${key}">More dots</button><button type="button" class="btn" id="ed-fewer-${key}">Fewer dots</button>
+      ${key === "steak" ? `<button type="button" class="btn" id="ed-bean">Use the cleaned-up bean shape</button>` : ""}</div>
     </div>`;
   edState[key] = { drag: -1, fast: false };
   return box;
@@ -1301,6 +1312,10 @@ function wireEditor(key) {
     const el = E.el(), P = el.points; if (P.length >= 48) return;
     el.points = P.flatMap((p, i) => { const q = P[(i + 1) % P.length]; return [p, [+((p[0] + q[0]) / 2).toFixed(3), +((p[1] + q[1]) / 2).toFixed(3)]]; });
     changed();
+  });
+  if (key === "steak") $("ed-bean").addEventListener("click", () => {
+    Object.assign(st.shape, { custom: true, points: clone(BEAN_POINTS), smooth: 1, rotate: 0.12, posX: 0, posY: 0, size: 1, facets: 0 });
+    syncInputs(); changed();
   });
   $("ed-fewer-" + key).addEventListener("click", () => {     // keep every other dot (never fewer than 3)
     const el = E.el(), P = el.points; if (P.length <= 3) return;
