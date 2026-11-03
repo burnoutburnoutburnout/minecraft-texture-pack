@@ -1200,7 +1200,7 @@ const EL_BORDER_KEYS = ["outline", "rough", "wave", "facets", "double", "thick",
   "bevel", "sticker", "feather", "drop", "waveType", "frame", "frameMat"];
 
 const EL_COMMON = {
-  design: "galaxy", texture: "galaxy", illus: "", gemFill: "facets", facetStr: 0.6, stars: 1, texScale: 1, texStrength: 1, speed: 2, glow: 0.32,
+  design: "galaxy", texture: "galaxy", illus: "", frameLight: 0, gemFill: "facets", facetStr: 0.6, stars: 1, texScale: 1, texStrength: 1, speed: 2, glow: 0.32,
   border: "clean", outline: 0.5, rough: [0, 4], wave: [0, 0], facets: 0, double: false, thick: 0,
   outlineStyle: "solid", glowOut: 0, glowCol: "main", ring: 0, dash: 0, stitch: 0, bevel: 0, sticker: 0, feather: 0, drop: 0, waveType: "sine", frame: 0, frameMat: "stone",
   posX: 0, posY: 0, size: 1, tilt: 0, custom: false, points: [], smooth: 0.85,
@@ -1522,8 +1522,8 @@ function elementIcon(kind, S, el, cols, t = 0, mode = "full", flash = false, see
   const FRAME = { stone: [rgb(66, 63, 62), rgb(156, 150, 144)], iron: [rgb(52, 56, 64), rgb(168, 174, 186)], gold: [rgb(128, 82, 16), rgb(255, 222, 120)],
     bronze: [rgb(92, 50, 22), rgb(214, 148, 86)], silver: [rgb(112, 114, 128), rgb(240, 243, 250)], obsidian: [rgb(14, 10, 22), rgb(84, 66, 112)] };
   const applyFrame = (g, u, X, Y, i, j, dim) => {
-    const fw = el.frame;
-    if (u > fw) return scale3(g, 1 - 0.45 * Math.exp(-(u - fw) / 0.28));              // the frame's shadow on the inside
+    const fw = el.frame, fl = el.frameLight ?? 0;
+    if (u > fw) return scale3(g, 1 - 0.45 * fl * Math.exp(-(u - fw) / 0.28));         // the frame's shadow on the inside
     const gx = (D[j * W + Math.min(i + 1, W - 1)] - D[j * W + Math.max(i - 1, 0)]) * S / 2;
     const gy = (D[Math.min(j + 1, H - 1) * W + i] - D[Math.max(j - 1, 0) * W + i]) * S / 2;
     const nf = gx * lc + gy * ls, tq = sat(u / fw), ridge = Math.cos(Math.PI * tq);
@@ -1537,8 +1537,8 @@ function elementIcon(kind, S, el, cols, t = 0, mode = "full", flash = false, see
     const flat = el.frameMat === "stone";
     // stone: a flat, evenly lit face with lit/shaded chamfers only near its two edges; metals: a rounded, shiny ridge
     const chamfer = flat ? Math.max(sstep(0.3, 0, tq), sstep(0.7, 1, tq)) : 1;
-    m = scale3(m, Math.max(0.3, Math.min(1.9, 1 + (flat ? 0.65 : 0.8) * nf * ridge * chamfer + (flat ? 0.08 : 0))));
-    m = mixc(m, WHITE, sat(nf * ridge * chamfer - 0.5) * (flat ? 0.3 : 0.7));                       // glint on the lit bevel
+    m = scale3(m, Math.max(0.3, Math.min(1.9, 1 + fl * ((flat ? 0.65 : 0.8) * nf * ridge * chamfer + (flat ? 0.08 : 0)))));
+    m = mixc(m, WHITE, sat(nf * ridge * chamfer - 0.5) * (flat ? 0.3 : 0.7) * fl);                  // glint on the lit bevel
     if (el.frameMat === "stone") m = mixc(m, scale3(lo, 0.35), sstep(0.07, 0.0, Math.abs(fbm(seed + 21, X * 5, Y * 5))) * 0.85); // cracks
     m = mixc(m, scale3(lo, 0.3), cov(Math.abs(u - fw) - 0.08));                          // dark lip around the inside
     if (dim) m = scale3(m, 0.65);
@@ -1650,6 +1650,7 @@ function segDist(x, y, a, b) {
 }
 /* The framed gem heart drawn to match the reference: mitred stone frame lit per segment, a heart-shaped
    table with a centre crease, and triangular facets joining it to the outline. Colours follow the palette. */
+const GH_AVG = GH.face.reduce((s, c) => [s[0] + c[0] / GH.face.length, s[1] + c[1] / GH.face.length, s[2] + c[2] / GH.face.length], [0, 0, 0]);
 function gemHeartIcon(S, el, cols, t, mode, flash, seed) {
   const img = newImg(S, 9, 9), cov = covf(S), W = 9 * S, P = elPal(el, cols, "heart"), sz = el.size;
   const ox = 4.5 + el.posX, oy = 4.49 + el.posY;
@@ -1670,8 +1671,10 @@ function gemHeartIcon(S, el, cols, t, mode, flash, seed) {
     if (dG > -0.08) {                                          // ---- frame ----
       let best = 9, seg = 0;
       for (let k = 0; k < 10; k++) { const dd = segDist(x, y, GH.outer[k], GH.outer[(k + 1) % 10]); if (dd < best) { best = dd; seg = k; } }
-      const f = GH.face[seg], lum = (0.3 * f[0] + 0.59 * f[1] + 0.11 * f[2]) / faceMax;
-      let m = mats ? mixc(mats[0], mats[1], sat(lum)) : f.slice();
+      // frame lighting (0 = flat, evenly coloured frame; 1 = each segment lit by the way it faces)
+      const fl = el.frameLight ?? 0, f = mixc(GH_AVG, GH.face[seg], fl);
+      const lum = (0.3 * f[0] + 0.59 * f[1] + 0.11 * f[2]) / faceMax;
+      let m = mats ? mixc(mats[0], mats[1], sat(lerp(0.45, lum, fl))) : f.slice();
       const fromOut = -dO, toGem = dG;
       if (!mats) {                                             // weathered stone: grain, pits and scratches
         const n = 0.12 * fbm(seed + 9, X * 8, Y * 8) + 0.06 * samp(T[1], X * 40, Y * 40);
@@ -1679,10 +1682,11 @@ function gemHeartIcon(S, el, cols, t, mode, flash, seed) {
         m = mixc(m, scale3(m, 0.55), sstep(0.06, 0, Math.abs(fbm(seed + 21, X * 5, Y * 5))) * 0.7);
       } else m = scale3(m, 1 + 0.08 * samp(T[2], X * 20, Y * 3));
       const lit = lum > 0.55;
-      if (fromOut < 0.16 * sz) m = lit ? mixc(m, WHITE, 0.35) : scale3(m, 0.75);          // outer bevel
-      m = mixc(m, rgb(196, 188, 182), sstep(0.06, 0.0, Math.abs(fromOut - 0.13 * sz)) * (lit ? 0.6 : 0.4));  // light edge all round
+      if (fromOut < 0.16 * sz) m = mixc(m, lit ? mixc(m, WHITE, 0.35) : scale3(m, 0.75), fl);  // outer bevel
+      m = mixc(m, rgb(196, 188, 182), sstep(0.06, 0.0, Math.abs(fromOut - 0.13 * sz)) * (lit ? 0.6 : 0.4) * fl);  // light edge all round
       if (!mats) m = mixc(m, rgb(170, 162, 156), sstep(1.35, 1.75, samp(T[5], X * 32, Y * 32)) * 0.45);      // pale grit specks
-      if (toGem < 0.13 * sz) m = mixc(m, rgb(46, 26, 26), sstep(0.13 * sz, 0.05 * sz, toGem)); // dark lip into the gem
+      if (toGem < 0.13 * sz) m = mixc(m, rgb(46, 26, 26), fl > 0 ? sstep(0.13 * sz, 0.05 * sz, toGem) * fl : 0); // dark lip into the gem
+      m = mixc(m, outC, cov(Math.abs(toGem) - 0.035 * sz) * (1 - fl));                   // flat frame: a crisp line where it meets the gem
       m = mixc(m, outC, cov(fromOut - 0.08 * sz));                                          // thin dark outline
       frameC = m;
     }
@@ -1705,7 +1709,7 @@ function gemHeartIcon(S, el, cols, t, mode, flash, seed) {
       } else g = pal(sat(tt));
       let ld = 9; for (let k = 0; k < F.p.length; k++) ld = Math.min(ld, segDist(x, y, F.p[k], F.p[(k + 1) % F.p.length]));
       g = mixc(g, mixc(c3, WHITE, 0.3), sstep(0.045, 0.0, ld * sz) * (F.table ? 0.45 : 0.2) * (texFill ? fs : 1));   // facet edges
-      g = scale3(g, 1 - 0.35 * sstep(0.2, 0, -dG));                                            // shade under the frame lip
+      g = scale3(g, 1 - 0.35 * sstep(0.2, 0, -dG) * (el.frameLight ?? 0));                   // shade under the frame lip
       if (mode === "container") g = texFill ? mixc(emptyC, scale3(g, 0.18), 0.3) : mixc(emptyC, scale3(g, 0.35), 0.45);
       gemC = g;
     }
@@ -1825,7 +1829,7 @@ function elSections(key, kind, name, cls) {
     SEL(p("outlineStyle"), "Outline style", [["solid", "Solid colour"], ["gradient", "Shaded"], ["light", "Bright"], ["ink", "Ink black"],
       ["gold", "Gold"], ["silver", "Silver"], ["rainbow", "Rainbow"], ["frost", "Frost"]]),
     R(p("dash"), "Dashes", 0, 30, 1), R(p("stitch"), "Stitches", 0, 30, 1), R(p("bevel"), "Bevel (negative = inset)", -1.5, 1.5, 0.01),
-    R(p("feather"), "Soft edge", 0, 1.2, 0.01), R(p("frame"), "Frame width", 0, 2.2, 0.01),
+    R(p("feather"), "Soft edge", 0, 1.2, 0.01), R(p("frame"), "Frame width", 0, 2.2, 0.01), R(p("frameLight"), "Frame lighting", 0, 1, 0.01),
     SEL(p("frameMat"), "Frame material", [["stone", "Stone"], ["iron", "Iron"], ["gold", "Gold"], ["bronze", "Bronze"], ["silver", "Silver"], ["obsidian", "Obsidian"]]));
   if (kind !== "bar") borderCtl.push(R(p("glowOut"), "Outer glow", 0, 1.5, 0.01),
     SEL(p("glowCol"), "Glow colour", [["main", "Highlight colour"], ["white", "White"], ["outline", "Outline colour"]]),
