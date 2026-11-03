@@ -221,7 +221,7 @@ DARK_STEAK = dict(base=(112, 54, 36), mid=(98, 46, 30), dark=(66, 28, 16),
 
 STEAK_BASE = dict(colors=DARK_STEAK, seed=2, rough=(0.13, 4.0), lump=(0.16, 1.6),
                   wave=(0.0, 0), facets=0, outline_w=0.42, outline_col=(18, 7, 3),
-                  double=False, thick=0.65)
+                  double=False, thick=0.65, lift=0.0, ry_top=0.0, dip=None)
 
 # border styles
 ROUGH = dict()                                                  # uneven edge
@@ -236,7 +236,8 @@ SOFT = dict(outline_w=0.3, outline_col=(60, 26, 14), rough=(0.05, 3.0))  # brown
 SLAB = dict(thick=1.15, rough=(0.1, 4.0))                       # extra thick steak
 
 STEAK_VARIANTS = {
-    "grill":        dict(ROUGH, texture="grill"),
+    "grill":        dict(ROUGH, texture="grill", lump=(0.0, 1.6), ry_top=2.45, lift=0.75,
+                         dip=(0.5, 0.15, 0.55)),
     "crosshatch":   dict(THICK, texture="crosshatch"),
     "wide-grill":   dict(LUMPY, texture="wide-grill"),
     "thin-grill":   dict(THIN, texture="thin-grill"),
@@ -413,9 +414,15 @@ class Renderer:
             return d, ex, ey
         dx, dy = X - 4.5, Y - (4.2 + drop)
         ex, ey = dx * ca + dy * sa, -dx * sa + dy * ca
+        # lift: the right end curls upward; ry_top > ry makes the top more arched
+        ey = ey + V["lift"] * np.maximum(ex / rx, 0.0) ** 2
         la, lf = V["lump"]
         lump = la * np.sin(ex * lf + 0.4)
-        ry_ = ry + np.where(ey < 0, lump, lump * 0.5)
+        ry_ = np.where(ey < 0, V["ry_top"] or ry, ry) + np.where(ey < 0, lump, lump * 0.5)
+        if V["dip"]:
+            # a dip ("pivot") in the middle of the top edge
+            da, dxp, dw = V["dip"]
+            ry_ = ry_ - np.where(ey < 0, da * np.exp(-((ex - dxp) / dw) ** 2), 0.0)
         f = (np.abs(ex / rx) ** p + np.abs(ey / ry_) ** p) ** (1.0 / p) - 1.0
         gy, gx = np.gradient(f, 1.0 / self.S)
         d = f / np.maximum(np.hypot(gx, gy), 1e-4)
