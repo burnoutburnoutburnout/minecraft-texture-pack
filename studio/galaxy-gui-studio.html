@@ -136,6 +136,7 @@ code { font-family: var(--font-mono); font-size: 0.9em; }
         <div class="closeup wide"><canvas id="states" width="1008" height="196" aria-label="Poison, wither, absorption and damaged hearts, hunger-effect steak, air bubble and horse jump bar"></canvas><span class="lbl">Poison · wither · absorption · damaged · hunger effect · air · jump bar</span></div>
       </div>
       <p class="hint">Previewed at GUI scale 4. In game the hearts and XP bar animate with OptiFine (Custom Animations on).</p>
+      <p class="hint" id="fps" aria-live="off"></p>
     </section>
 
     <div class="controls-col" id="controls">
@@ -1200,7 +1201,7 @@ const EL_BORDER_KEYS = ["outline", "rough", "wave", "facets", "double", "thick",
   "bevel", "sticker", "feather", "drop", "waveType", "frame", "frameMat"];
 
 const EL_COMMON = {
-  design: "galaxy", texture: "galaxy", illus: "", frameLight: 0, gemFill: "facets", facetStr: 0.6, stars: 1, texScale: 1, texStrength: 1, speed: 2, glow: 0.32,
+  design: "galaxy", texture: "galaxy", illus: "", frameLight: 0, animFps: "smooth", gemFill: "facets", facetStr: 0.6, stars: 1, texScale: 1, texStrength: 1, speed: 2, glow: 0.32,
   border: "clean", outline: 0.5, rough: [0, 4], wave: [0, 0], facets: 0, double: false, thick: 0,
   outlineStyle: "solid", glowOut: 0, glowCol: "main", ring: 0, dash: 0, stitch: 0, bevel: 0, sticker: 0, feather: 0, drop: 0, waveType: "sine", frame: 0, frameMat: "stone",
   posX: 0, posY: 0, size: 1, tilt: 0, custom: false, points: [], smooth: 0.85,
@@ -1839,7 +1840,8 @@ function elSections(key, kind, name, cls) {
       SEL(p("gemFill"), "Gem fill (framed gem heart)", [["facets", "Cut ruby facets"], ["texture", "Selected texture"]]),
       R(p("facetStr"), "Facet shading on the texture", 0, 1, 0.01)] : []),
     R(p("stars"), "Stars", 0, 3, 0.05), R(p("texScale"), "Texture size", 0.3, 3, 0.01), R(p("texStrength"), "Texture strength", 0, 1, 0.01), R(p("glow"), "Edge glow", 0, 1, 0.01)];
-  if (kind !== "armor") texCtl.push(SP(p("speed"), kind === "bar" ? "Flow speed" : "Animation speed"));
+  if (kind !== "armor") texCtl.push(SP(p("speed"), kind === "bar" ? "Flow speed" : "Animation speed"),
+    SEL(p("animFps"), "Animation frame rate", [["smooth", "Smooth: your monitor's refresh rate (e.g. 240 fps)"], ["ticks", "Stepped: up to 20 fps (game ticks)"]]));
   const lightCtl = [AN(p("light"), "Light direction"), R(p("shade"), "Inner shadow", 0, 2.5, 0.01), R(p("falloff"), "Light falloff", 0, 2, 0.01),
     R(p("rimLight"), "Rim light", 0, 2, 0.01), R(p("rimShadow"), "Rim shadow", 0, 2, 0.01)];
   const shineCtl = kind === "bar"
@@ -2305,21 +2307,32 @@ const ground = (() => {
 })();
 const reduceMotion = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
 const t0 = performance.now();
+let fpsN = 0, fpsT = performance.now();
 function drawHud(now) {
   if (pv) {
-    const g = 8, tick = (now - t0) / 50;
-    const hf = reduceMotion ? 0 : Math.floor(tick / st.heart.speed) % HEART_FRAMES, xf = reduceMotion ? 0 : Math.floor(tick / st.xp.speed) % XP_FRAMES;
+    const g = 8, tick = (now - t0) / 50;                                   // 20 game ticks per second
+    const hp = reduceMotion ? 0 : tick / st.heart.speed, xp = reduceMotion ? 0 : tick / st.xp.speed;
+    const hf = Math.floor(hp) % HEART_FRAMES, xf = Math.floor(xp) % XP_FRAMES;
+    // OptiFine "interpolate": the next frame fades in between ticks, so motion updates on every screen refresh
+    const ha = st.heart.animFps === "smooth" ? hp % 1 : 0, xa = st.xp.animFps === "smooth" ? xp % 1 : 0;
+    const hn = (hf + 1) % HEART_FRAMES, xn = (xf + 1) % XP_FRAMES;
     hctx.drawImage(ground, 0, 0);
     const x0 = (1600 - 182 * g) / 2;
     hctx.drawImage(pv.bossbg, x0, 36); hctx.drawImage(pv.boss, 0, 0, Math.round(182 * 0.62 * PS), 5 * PS, x0, 36, Math.round(182 * 0.62 * g), 5 * g);
     hctx.drawImage(pv.cross, 800 - 7.5 * g, 200 - 7.5 * g);
     const xpY = 500, rowY = xpY - 10 * g, topY = rowY - 10 * g;
     for (let i = 0; i < 10; i++) hctx.drawImage(pv.armor[i < 6 ? 2 : i === 6 ? 1 : 0], x0 + i * 8 * g, topY);
-    for (let i = 0; i < 10; i++) { const x = x0 + i * 8 * g; hctx.drawImage(pv.cont, x, rowY); if (i < 9) hctx.drawImage(pv.hearts[hf][i < 8 ? 0 : 1], x, rowY); }
+    for (let i = 0; i < 10; i++) { const x = x0 + i * 8 * g; hctx.drawImage(pv.cont, x, rowY); if (i < 9) { const h = i < 8 ? 0 : 1; hctx.drawImage(pv.hearts[hf][h], x, rowY);
+      if (ha > 0) { hctx.globalAlpha = ha; hctx.drawImage(pv.hearts[hn][h], x, rowY); hctx.globalAlpha = 1; } } }
     for (let i = 0; i < 10; i++) { const x = x0 + 182 * g - 9 * g - i * 8 * g; hctx.drawImage(pv.steakCont, x, rowY); if (i < 8) hctx.drawImage(i < 7 ? pv.steak : pv.steakHalf, x, rowY); }
     for (let i = 0; i < 7; i++) hctx.drawImage(i < 6 ? pv.bubble : pv.pop, x0 + 182 * g - 9 * g - i * 8 * g, topY);
     hctx.drawImage(pv.xpbg, x0, xpY);
     const fw = Math.round(182 * 0.72 * PS); hctx.drawImage(pv.xp[xf], 0, 0, fw, 5 * PS, x0, xpY, fw * g / PS, 5 * g);
+    if (xa > 0) { hctx.globalAlpha = xa; hctx.drawImage(pv.xp[xn], 0, 0, fw, 5 * PS, x0, xpY, fw * g / PS, 5 * g); hctx.globalAlpha = 1; }
+    // measured preview frame rate
+    fpsN++; if (now - fpsT > 1000) { const fps = Math.round(fpsN * 1000 / (now - fpsT)); fpsN = 0; fpsT = now;
+      const smooth = st.heart.animFps === "smooth" || st.xp.animFps === "smooth";
+      $("fps").textContent = smooth ? `Preview animating at ${fps} fps (your screen's refresh rate).` : `Preview animating at 20 fps or less (stepped).`; }
   }
   requestAnimationFrame(drawHud);
 }
@@ -2399,10 +2412,12 @@ async function buildPack(progress) {
   zip.file(anim + "hearts.png", encodePNG(hearts, hw, hh * HEART_FRAMES));
   progress((jobs.length + 3) / total, "Compressing XP animation…"); await pause();
   zip.file(anim + "xp.png", encodePNG(xp, xw, xh * XP_FRAMES));
-  const props = (src, x, y, w, h, dur) => `from=./${src}\nto=textures/gui/icons.png\nx=${x}\ny=${y}\nw=${w}\nh=${h}\nduration=${dur}\n`;
-  zip.file(anim + "hearts.properties", props("hearts.png", 52 * S, 0, 18 * S, 9 * S, st.heart.speed));
-  zip.file(anim + "hearts_hardcore.properties", props("hearts.png", 52 * S, 45 * S, 18 * S, 9 * S, st.heart.speed));
-  zip.file(anim + "xp.properties", props("xp.png", 0, 69 * S, 182 * S, 5 * S, st.xp.speed));
+  // interpolate=true (OptiFine 1.8.9 HD U L5 or newer) blends frames on every rendered frame instead of stepping each tick
+  const props = (src, x, y, w, h, dur, smooth) => `from=./${src}\nto=textures/gui/icons.png\nx=${x}\ny=${y}\nw=${w}\nh=${h}\nduration=${dur}\n`
+    + (smooth ? "interpolate=true\n" : "");
+  zip.file(anim + "hearts.properties", props("hearts.png", 52 * S, 0, 18 * S, 9 * S, st.heart.speed, st.heart.animFps === "smooth"));
+  zip.file(anim + "hearts_hardcore.properties", props("hearts.png", 52 * S, 45 * S, 18 * S, 9 * S, st.heart.speed, st.heart.animFps === "smooth"));
+  zip.file(anim + "xp.properties", props("xp.png", 0, 69 * S, 182 * S, 5 * S, st.xp.speed, st.xp.animFps === "smooth"));
   progress(1, "Zipping…"); await pause();
   return zip.generateAsync({ type: "blob", compression: "STORE" });
 }
