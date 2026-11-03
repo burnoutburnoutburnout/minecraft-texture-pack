@@ -80,6 +80,11 @@ canvas.fit { display: block; width: 100%; height: auto; }
 input[type="range"] { width: 100%; accent-color: var(--accent); }
 .card.meat input[type="range"] { accent-color: var(--meat); }
 .card.xp input[type="range"] { accent-color: var(--xp); }
+.editor { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; align-items: start; }
+@media (min-width: 560px) { .editor { grid-template-columns: minmax(0, 300px) minmax(0, 1fr); } }
+#shapeEd { width: 100%; max-width: 300px; aspect-ratio: 1; height: auto; border-radius: 10px; border: 1px solid var(--line); touch-action: none; cursor: crosshair; }
+.editor-side { display: grid; gap: 10px; min-width: 0; }
+.seg button:disabled, .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .toggle { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; cursor: pointer; }
 .toggle input { width: 18px; height: 18px; accent-color: var(--meat); }
 .colors { display: flex; flex-wrap: wrap; gap: 12px; }
@@ -484,7 +489,11 @@ const BORDER_NAMES = { rough: "Rough", thick: "Thick line", thin: "Thin line", l
   wavy: "Wavy", double: "Double line", soft: "Soft brown", slab: "Thick slab" };
 const SHAPE_BASE = { texture: "grill", border: "rough", rough: [0.13, 4], lump: [0.16, 1.6], wave: [0, 0], facets: 0, outline: 0.42,
   outlineCol: "#120703", double: false, thick: 0.65, lift: 0, arch: 0, dip: 0, dipX: 0.15, dipW: 0.55,
-  rx: 3.95, ry: 2.2, p: 2.4, angle: -0.5, texStrength: 1, texScale: 1, burnW: 1, burnAng: 0 };
+  rx: 3.95, ry: 2.2, p: 2.4, angle: -0.5, texStrength: 1, texScale: 1, burnW: 1, burnAng: 0,
+  posX: 0, posY: 0, size: 1, bend: 0, taper: 0, liftL: 0, bulge: 0, dipB: 0, dipBX: 0, dipBW: 0.6,
+  custom: false, points: [], smooth: 0.85,
+  burnCount: 0, burnSpacing: 1, burnOffset: 0, burnHalo: 1, cross: false,
+  light: 225, shade: 1, rimLight: 1, rimShadow: 1, shine: 0, shineSize: 1, shineX: -1.8 };
 const BORDER_KEYS = ["rough", "lump", "wave", "facets", "outline", "outlineCol", "double", "thick"];
 function borderPreset(b) {
   const o = {}; for (const k of BORDER_KEYS) o[k] = clone(SHAPE_BASE[k]);
@@ -495,44 +504,100 @@ function designShape(name) {
   delete d.b; return Object.assign(sh, d, { texture: name });
 }
 
+/* Slider shape: a superellipse slab, bent, tapered, lifted and dented by the sliders.
+   Works in "design space"; position and size are applied around it. */
+function shapeLocal(sh, Xd, Yd, drop) {
+  const ca = Math.cos(sh.angle), sa = Math.sin(sh.angle), rx = sh.rx, ry = sh.ry, p = sh.p;
+  const dx = Xd - 4.5, dy = Yd - (4.2 + drop);
+  const ex = dx * ca + dy * sa, u = ex / rx;
+  let ey = -dx * sa + dy * ca;
+  ey += sh.lift * Math.max(u, 0) ** 2 + sh.liftL * Math.max(-u, 0) ** 2 + sh.bend * (u * u - 0.35);
+  const lump = sh.lump[0] * Math.sin(ex * sh.lump[1] + 0.4);
+  let ry_ = ey < 0 ? ry + sh.arch + lump : ry + sh.bulge + lump * 0.5;
+  ry_ *= 1 + sh.taper * Math.max(-1, Math.min(1, u));
+  if (ey < 0 && sh.dip) ry_ -= sh.dip * Math.exp(-(((ex - sh.dipX) / sh.dipW) ** 2));
+  if (ey >= 0 && sh.dipB) ry_ -= sh.dipB * Math.exp(-(((ex - sh.dipBX) / sh.dipBW) ** 2));
+  ry_ = Math.max(ry_, 0.15);
+  return [Math.pow(Math.abs(u) ** p + Math.abs(ey / ry_) ** p, 1 / p) - 1, ex, ey];
+}
+const toWorld = (sh, x, y) => [4.5 + (x - 4.5) * sh.size + sh.posX, 4.2 + (y - 4.2) * sh.size + sh.posY];
+const toDesign = (sh, x, y) => [4.5 + (x - 4.5 - sh.posX) / sh.size, 4.2 + (y - 4.2 - sh.posY) / sh.size];
+/* Custom outline: a closed curve through the user's points (smooth = Catmull-Rom, 0 = straight sides). */
+function customPoly(sh, drop) {
+  const P = sh.points, n = P.length, s = sh.smooth, out = [];
+  for (let i = 0; i < n; i++) {
+    const p0 = P[(i - 1 + n) % n], p1 = P[i], p2 = P[(i + 1) % n], p3 = P[(i + 2) % n];
+    for (let k = 0; k < 12; k++) {
+      const t = k / 12, t2 = t * t, t3 = t2 * t, pt = [0, 0];
+      for (let c = 0; c < 2; c++) {
+        const cat = 0.5 * (2 * p1[c] + (-p0[c] + p2[c]) * t + (2 * p0[c] - 5 * p1[c] + 4 * p2[c] - p3[c]) * t2 + (-p0[c] + 3 * p1[c] - 3 * p2[c] + p3[c]) * t3);
+        pt[c] = lerp(p1[c] + (p2[c] - p1[c]) * t, cat, s);
+      }
+      const w = toWorld(sh, pt[0], pt[1]); out.push([w[0], w[1] + drop * sh.size]);
+    }
+  }
+  return out;
+}
+/* Sample the slider shape's outline into editable points. */
+function shapeToPoints(sh, n = 12) {
+  const pts = [];
+  for (let k = 0; k < n; k++) {
+    const th = sh.angle + Math.PI + TAU * k / n, c = Math.cos(th), s2 = Math.sin(th);
+    let lo = 0, hi = 6;
+    for (let it = 0; it < 30; it++) { const m = (lo + hi) / 2; if (shapeLocal(sh, 4.5 + m * c, 4.2 + m * s2, 0)[0] < 0) lo = m; else hi = m; }
+    pts.push([+(4.5 + lo * c).toFixed(3), +(4.2 + lo * s2).toFixed(3)]);
+  }
+  return pts;
+}
+
 function steakGrids(S, sh, drop, seed) {
   const W = 9 * S, H = 9 * S, n = W * H, f = new Float32Array(n), EX = new Float32Array(n), EY = new Float32Array(n), D = new Float32Array(n);
-  const a = sh.angle, ca = Math.cos(a), sa = Math.sin(a), rx = sh.rx, ry = sh.ry, p = sh.p;
-  let poly = null;
-  if (sh.facets) {
-    const r = mulberry32(seed * 31 + 13); poly = [];
+  const custom = sh.custom && sh.points && sh.points.length >= 3;
+  let poly = null, bb = null, cen = null;
+  if (custom) {
+    poly = customPoly(sh, drop);
+    bb = [Infinity, Infinity, -Infinity, -Infinity]; cen = [0, 0];
+    for (const [x, y] of poly) { bb[0] = Math.min(bb[0], x); bb[1] = Math.min(bb[1], y); bb[2] = Math.max(bb[2], x); bb[3] = Math.max(bb[3], y); cen[0] += x; cen[1] += y; }
+    cen[0] /= poly.length; cen[1] /= poly.length;
+  } else if (sh.facets) {
+    const r = mulberry32(seed * 31 + 13), p = sh.p, ca = Math.cos(sh.angle), sa = Math.sin(sh.angle); poly = [];
     for (let k = 0; k < sh.facets; k++) {
       const tt = TAU * (k + 0.5 * r()) / sh.facets, c = Math.cos(tt), s = Math.sin(tt);
       const rr = 1 / Math.pow(Math.abs(c) ** p + Math.abs(s) ** p, 1 / p);
-      const lx = rx * rr * c * (0.94 + 0.1 * r()), ly = ry * rr * s * (0.94 + 0.1 * r());
-      poly.push([4.5 + lx * ca - ly * sa, 4.2 + drop + lx * sa + ly * ca]);
+      const lx = sh.rx * rr * c * (0.94 + 0.1 * r()), ly = sh.ry * rr * s * (0.94 + 0.1 * r());
+      poly.push(toWorld(sh, 4.5 + lx * ca - ly * sa, 4.2 + drop + lx * sa + ly * ca));
     }
   }
+  const ca = Math.cos(sh.angle), sa = Math.sin(sh.angle);
   for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
     const X = (i + 0.5) / S, Y = (j + 0.5) / S, k = j * W + i;
-    const dx = X - 4.5, dy = Y - (4.2 + drop);
-    const ex = dx * ca + dy * sa; let ey = -dx * sa + dy * ca;
-    if (poly) { EX[k] = ex; EY[k] = ey; D[k] = sdPolygon(X, Y, poly); continue; }
-    ey += sh.lift * Math.max(ex / rx, 0) ** 2;
-    const lump = sh.lump[0] * Math.sin(ex * sh.lump[1] + 0.4);
-    let ry_ = (ey < 0 ? ry + sh.arch : ry) + (ey < 0 ? lump : lump * 0.5);
-    if (sh.dip && ey < 0) ry_ -= sh.dip * Math.exp(-(((ex - sh.dipX) / sh.dipW) ** 2));
-    ry_ = Math.max(ry_, 0.2);
-    f[k] = Math.pow(Math.abs(ex / rx) ** p + Math.abs(ey / ry_) ** p, 1 / p) - 1;
-    EX[k] = ex; EY[k] = ey;
+    if (poly) {
+      const ox = custom ? cen[0] : 4.5 + sh.posX, oy = custom ? cen[1] : 4.2 + sh.posY + drop * sh.size;
+      const dx = (X - ox) / sh.size, dy = (Y - oy) / sh.size;
+      EX[k] = dx * ca + dy * sa; EY[k] = -dx * sa + dy * ca;
+      if (custom && (X < bb[0] - 1.5 || X > bb[2] + 1.5 || Y < bb[1] - 1.5 || Y > bb[3] + 1.5))
+        D[k] = Math.hypot(Math.max(bb[0] - X, 0, X - bb[2]), Math.max(bb[1] - Y, 0, Y - bb[3]));
+      else D[k] = sdPolygon(X, Y, poly);
+      continue;
+    }
+    const [Xd, Yd] = toDesign(sh, X, Y);
+    const r = shapeLocal(sh, Xd, Yd, drop);
+    f[k] = r[0]; EX[k] = r[1]; EY[k] = r[2];
   }
-  if (!poly) {
-    for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
-      const k = j * W + i;
+  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+    const k = j * W + i;
+    let d = D[k];
+    if (!poly) {
       const gx = (f[j * W + Math.min(i + 1, W - 1)] - f[j * W + Math.max(i - 1, 0)]) * S / ((i > 0 && i < W - 1) ? 2 : 1);
       const gy = (f[Math.min(j + 1, H - 1) * W + i] - f[Math.max(j - 1, 0) * W + i]) * S / ((j > 0 && j < H - 1) ? 2 : 1);
-      let d = f[k] / Math.max(Math.hypot(gx, gy), 1e-4);
-      const X = (i + 0.5) / S, Yr = (j + 0.5) / S - drop;
-      const [ra, rf] = sh.rough;
-      if (ra) { d += ra * samp(T[4], X * rf + 3, Yr * rf); if (rf <= 5) d += ra * 0.35 * samp(T[2], X * rf * 3, Yr * rf * 3); }
-      if (sh.wave[0]) d += sh.wave[0] * Math.sin(Math.atan2(EY[k] / ry, EX[k] / rx) * sh.wave[1]);
-      D[k] = d;
+      d = f[k] / Math.max(Math.hypot(gx, gy), 1e-4);
     }
+    if (!poly || custom) {
+      const X = (i + 0.5) / S, Yr = (j + 0.5) / S - drop * sh.size, [ra, rf] = sh.rough;
+      if (ra) { d += ra * samp(T[4], X * rf + 3, Yr * rf); if (rf <= 5) d += ra * 0.35 * samp(T[2], X * rf * 3, Yr * rf * 3); }
+      if (sh.wave[0]) d += sh.wave[0] * Math.sin(Math.atan2(EY[k] / sh.ry, EX[k] / sh.rx) * sh.wave[1]);
+    }
+    D[k] = d;
   }
   return { D, EX, EY };
 }
@@ -557,19 +622,26 @@ function steakColors(st) {
 }
 function steakTexture(tex, X, Y, ex, ey, top, C, seed, ctx, cov) {
   const n = fbm(seed, X * 6 + 20, Y * 6 + 60);
-  let face = scale3(mixc(C.base, C.mid, sat(0.5 + 0.4 * n)), 1.08 - 0.25 * sat((ey + 1.6) / 3.2));
+  let face = scale3(mixc(C.base, C.mid, sat(0.5 + 0.4 * n)), 1.08 - 0.25 * ctx.shade * sat((ctx.lp + 1.6) / 3.2));
   const plain = face, BLACK = ctx.burnCol;
-  const burns = (cs, k, w) => {
-    const th = Math.atan(k) + ctx.burnAng, u = ex * Math.cos(th) + ey * Math.sin(th); let b = 0, h = 0;
+  const burns = (cs, k, w, extra = 0) => {
+    if (ctx.burnCount > 0) { const sp = 1.6 * ctx.burnSpacing; cs = []; for (let q = 0; q < ctx.burnCount; q++) cs.push((q - (ctx.burnCount - 1) / 2) * sp); }
+    else cs = cs.map(c => c * ctx.burnSpacing);
+    cs = cs.map(c => c + ctx.burnOffset);
+    const th = Math.atan(k) + ctx.burnAng + extra, u = ex * Math.cos(th) + ey * Math.sin(th); let b = 0, h = 0;
     w *= ctx.burnW;
     for (const c of cs) { const ww = w * (1 - 0.45 * sat(Math.abs(ey) / 2)); b = Math.max(b, cov(Math.abs(u - c) - ww)); h = Math.max(h, Math.exp(-(((u - c) / (w * 2.2)) ** 2))); }
     return [b, h];
   };
-  const grill = (cs, k, w, halo = 0.55) => { const [b, h] = burns(cs, k, w); face = mixc(face, C.dark, h * halo); face = mixc(face, BLACK, b); };
+  const grill = (cs, k, w, halo = 0.55) => {
+    let [b, h] = burns(cs, k, w);
+    if (ctx.cross) { const [b2, h2] = burns(cs, k, w, 1.25); b = Math.max(b, b2); h = Math.max(h, h2); }
+    face = mixc(face, C.dark, h * halo * ctx.burnHalo); face = mixc(face, BLACK, b);
+  };
   switch (tex) {
     case "grill": grill([-2.1, 0, 2.1], 0.55, 0.21); break;
     case "crosshatch": { const c4 = [-2.4, -0.8, 0.8, 2.4]; const [b1, h1] = burns(c4, 1.0, 0.13), [b2, h2] = burns(c4, -2.2, 0.13);
-      face = mixc(face, C.dark, Math.max(h1, h2) * 0.45); face = mixc(face, BLACK, Math.max(b1, b2)); break; }
+      face = mixc(face, C.dark, Math.max(h1, h2) * 0.45 * ctx.burnHalo); face = mixc(face, BLACK, Math.max(b1, b2)); break; }
     case "wide-grill": grill([-1.3, 1.3], 0.4, 0.36, 0.4); break;
     case "thin-grill": grill([-2.8, -1.4, 0, 1.4, 2.8], -0.45, 0.09, 0.35); break;
     case "speckle": for (const s of ctx.specks) face = mixc(face, s.c, cov(Math.hypot(ex - s.x, (ey - s.y) * 1.3) - s.r)); break;
@@ -610,7 +682,10 @@ function steakIcon(S, st, kind = "full", flash = false, hunger = false, shOverri
   const sh = shOverride || st.shape, C = steakColors(st), seed = 2, cov = covf(S), tsc = sh.texScale || 1;
   const top = steakGrids(S, sh, 0, seed), side = steakGrids(S, sh, sh.thick, seed);
   const W = 9 * S, H = 9 * S, img = newImg(S, 9, 9), ow = sh.outline;
-  const r = mulberry32(seed + 77), ctx = { specks: [], drops: [], burnW: sh.burnW, burnAng: sh.burnAng, burnCol: unhex(st.steakCol.burn), strength: sh.texStrength };
+  const r = mulberry32(seed + 77), ctx = { specks: [], drops: [], burnW: sh.burnW, burnAng: sh.burnAng, burnCol: unhex(st.steakCol.burn), strength: sh.texStrength,
+    burnCount: sh.burnCount, burnSpacing: sh.burnSpacing, burnOffset: sh.burnOffset, burnHalo: sh.burnHalo, cross: sh.cross, shade: sh.shade, lp: 0 };
+  const lc = Math.cos(sh.light * Math.PI / 180), ls = Math.sin(sh.light * Math.PI / 180);
+  const lcx = 4.5 + sh.posX, lcy = 4.2 + sh.posY;
   for (let i = 0; i < 70; i++) ctx.specks.push({ x: -3.8 + r() * 7.6, y: -2.2 + r() * 4.4, r: 0.09 + r() * 0.19, c: [C.dark, C.light, scale3(C.dark, 0.85)][i % 3] });
   for (let i = 0; i < 14; i++) ctx.drops.push({ x: -3.3 + r() * 6.6, y: -1.6 + r() * 3.2 });
   const outlineCol = unhex(sh.outlineCol), tintC = unhex(st.hungerTint);
@@ -625,12 +700,17 @@ function steakIcon(S, st, kind = "full", flash = false, hunger = false, shOverri
       c = mixc(flash ? rgb(250, 240, 232) : rgb(10, 5, 2), fill, inner);
       c = mixc(c, rgb(22, 13, 9), cov(Math.abs(t) - 0.1) * (sd < 0 ? 1 : 0) * inner);
     } else {
+      ctx.lp = -((X - lcx) * lc + (Y - lcy) * ls);
       let face = steakTexture(sh.texture, X / tsc, Y / tsc, top.EX[k] / tsc, top.EY[k] / tsc, t, C, seed, ctx, d => cov(d * tsc));
       const gx = (top.D[j * W + Math.min(i + 1, W - 1)] - top.D[j * W + Math.max(i - 1, 0)]) * S / 2;
       const gy = (top.D[Math.min(j + 1, H - 1) * W + i] - top.D[Math.max(j - 1, 0) * W + i]) * S / 2;
-      const facing = -(gx + gy) / Math.SQRT2, edge = sstep(-0.95, -0.3, t);
-      face = mixc(face, C.rim, edge * sstep(0.2, 0.7, facing) * 0.7);
-      face = mixc(face, C.side, edge * sstep(0.2, 0.7, -facing) * 0.5);
+      const facing = gx * lc + gy * ls, edge = sstep(-0.95, -0.3, t);
+      face = mixc(face, C.rim, sat(edge * sstep(0.2, 0.7, facing) * 0.7 * sh.rimLight));
+      face = mixc(face, C.side, sat(edge * sstep(0.2, 0.7, -facing) * 0.5 * sh.rimShadow));
+      if (sh.shine > 0) {
+        const gl = sdEllipse(top.EX[k], top.EY[k], sh.shineX, -sh.ry * 0.5, 0.9 * sh.shineSize, 0.24 * sh.shineSize, 0);
+        face = mixc(face, rgb(255, 236, 222), sat(-gl / 0.25) * sh.shine * (t < 0 ? 1 : 0));
+      }
       c = t < 0 ? face : mixc(C.side, C.side2, sat((X - 1) / 7));
       c = mixc(c, scale3(C.side2, 0.7), cov(Math.abs(t) - 0.07) * (sd < 0 ? 1 : 0));
       let out = outlineCol;
@@ -717,25 +797,41 @@ const R = (path, label, min, max, step) => ({ type: "range", path, label, min, m
 const SP = (path, label) => ({ type: "speed", path, label });
 const D = (path, label, min, max, step) => ({ type: "deg", path, label, min, max, step });
 const TG = (path, label) => ({ type: "toggle", path, label });
+const AN = (path, label) => ({ type: "angle", path, label, min: 0, max: 360, step: 1 });
 const SECTIONS = [
   { id: "steak-design", title: "Steak: start from a design", cls: "meat", chips: "designs",
     hint: "A design sets the texture, border and shape together. Change any part of it in the cards below.", groups: [] },
   { id: "steak-texture", title: "Steak texture", cls: "meat", chips: "textures", groups: [
-    { controls: [R("shape.texStrength", "Texture strength", 0, 1, 0.01), R("shape.texScale", "Texture size", 0.5, 2, 0.01),
-      R("shape.burnW", "Burn line width", 0.3, 2.5, 0.01), D("shape.burnAng", "Burn line angle", -1.2, 1.2, 0.01)] },
+    { controls: [R("shape.texStrength", "Texture strength", 0, 1, 0.01), R("shape.texScale", "Texture size", 0.3, 3, 0.01)] },
+    { label: "Burn lines (grill textures)", controls: [R("shape.burnCount", "Number of lines", 0, 10, 1), R("shape.burnSpacing", "Spacing", 0.3, 2.5, 0.01),
+      R("shape.burnW", "Width", 0.2, 3, 0.01), D("shape.burnAng", "Angle", -1.57, 1.57, 0.01), R("shape.burnOffset", "Slide", -3, 3, 0.01),
+      R("shape.burnHalo", "Scorch glow", 0, 2.5, 0.01), TG("shape.cross", "Crosshatch")] },
   ] },
   { id: "steak-border", title: "Steak border", cls: "meat", chips: "borders",
     hint: "Facets above 0 cut the edge into flat sides, which turns off roughness, lumps and ripples.", groups: [
-    { controls: [R("shape.outline", "Outline thickness", 0.1, 0.8, 0.01), R("shape.thick", "Steak thickness", 0.2, 1.4, 0.01),
-      R("shape.rough.0", "Roughness", 0, 0.3, 0.005), R("shape.rough.1", "Roughness detail", 2, 12, 0.1),
-      R("shape.lump.0", "Lumps", 0, 0.5, 0.01), R("shape.lump.1", "Lump count", 0.5, 4, 0.05),
-      R("shape.wave.0", "Ripples", 0, 0.3, 0.005), R("shape.wave.1", "Ripple count", 0, 24, 1),
+    { controls: [R("shape.outline", "Outline thickness", 0, 1, 0.01), R("shape.thick", "Steak thickness", 0, 2, 0.01),
+      R("shape.rough.0", "Roughness", 0, 0.45, 0.005), R("shape.rough.1", "Roughness detail", 1, 16, 0.1),
+      R("shape.lump.0", "Lumps", 0, 0.8, 0.01), R("shape.lump.1", "Lump count", 0.3, 6, 0.05),
+      R("shape.wave.0", "Ripples", 0, 0.45, 0.005), R("shape.wave.1", "Ripple count", 0, 40, 1),
       R("shape.facets", "Facets", 0, 24, 1), TG("shape.double", "Inner highlight line")] },
   ] },
-  { id: "steak-shape", title: "Steak shape", cls: "meat", groups: [
-    { controls: [R("shape.rx", "Length", 2.8, 4.3, 0.01), R("shape.ry", "Width", 1.4, 2.8, 0.01), R("shape.p", "Squareness", 1.6, 4.5, 0.05),
-      D("shape.angle", "Tilt", -1.2, 0.4, 0.01), R("shape.arch", "Top arch", 0, 0.7, 0.01), R("shape.lift", "Right end lift", 0, 1.3, 0.01),
-      R("shape.dip", "Top dip", 0, 0.9, 0.01), R("shape.dipX", "Dip position", -3, 3, 0.05), R("shape.dipW", "Dip width", 0.2, 1.6, 0.01)] },
+  { id: "steak-shape", title: "Steak shape", cls: "meat", editor: true,
+    hint: "Use the sliders, or switch to Draw my own and drag the dots. The dashed square is the edge of the icon.", groups: [
+    { label: "Position & size", controls: [R("shape.posX", "Move left / right", -3, 3, 0.01), R("shape.posY", "Move up / down", -3, 3, 0.01),
+      R("shape.size", "Size", 0.4, 1.6, 0.01), D("shape.angle", "Tilt", -1.57, 1.57, 0.01)] },
+    { label: "Draw my own", controls: [R("shape.smooth", "Corner smoothness", 0, 1, 0.01)] },
+    { label: "Body (slider shape)", controls: [R("shape.rx", "Length", 1.5, 4.6, 0.01), R("shape.ry", "Width", 0.8, 3.6, 0.01),
+      R("shape.p", "Squareness", 1.2, 6, 0.05), R("shape.bend", "Bend", -1.5, 1.5, 0.01), R("shape.taper", "Taper", -0.8, 0.8, 0.01),
+      R("shape.liftL", "Left end lift", -1.5, 1.8, 0.01), R("shape.lift", "Right end lift", -1.5, 1.8, 0.01)] },
+    { label: "Top edge", controls: [R("shape.arch", "Arch", -0.8, 1.2, 0.01), R("shape.dip", "Dip (negative = bump)", -1, 1, 0.01),
+      R("shape.dipX", "Dip position", -4, 4, 0.05), R("shape.dipW", "Dip width", 0.2, 3, 0.01)] },
+    { label: "Bottom edge", controls: [R("shape.bulge", "Bulge", -0.8, 1.2, 0.01), R("shape.dipB", "Dip (negative = bump)", -1, 1, 0.01),
+      R("shape.dipBX", "Dip position", -4, 4, 0.05), R("shape.dipBW", "Dip width", 0.2, 3, 0.01)] },
+  ] },
+  { id: "steak-light", title: "Steak lighting", cls: "meat", groups: [
+    { controls: [AN("shape.light", "Light direction"), R("shape.shade", "Shading", 0, 2.5, 0.01),
+      R("shape.rimLight", "Rim light", 0, 2, 0.01), R("shape.rimShadow", "Rim shadow", 0, 2, 0.01)] },
+    { label: "Shine spot", controls: [R("shape.shine", "Strength", 0, 1, 0.01), R("shape.shineSize", "Size", 0.3, 3, 0.01), R("shape.shineX", "Position", -4, 4, 0.05)] },
   ] },
   { id: "steak-colors", title: "Steak colours", cls: "meat", groups: [
     { controls: [C("steakCol.meat", "Meat"), C("steakCol.dark", "Seared"), C("steakCol.rim", "Highlight"), C("steakCol.side", "Side"),
@@ -767,8 +863,98 @@ const SECTIONS = [
   ] },
 ];
 const $ = id => document.getElementById(id);
+/* ---------- outline editor ---------- */
+const ED = 720, EDS = 40;          // canvas px, render scale (base px -> 360 px, drawn at 2x)
+function makeEditor() {
+  const box = document.createElement("div"); box.className = "editor";
+  box.innerHTML = `<canvas id="shapeEd" width="${ED}" height="${ED}" aria-label="Steak outline editor"></canvas>
+    <div class="editor-side">
+      <div class="seg" role="group" aria-label="Shape mode"><button type="button" id="m-sliders">Slider shape</button><button type="button" id="m-custom">Draw my own</button></div>
+      <p class="hint" id="ed-hint"></p>
+      <div class="export-row"><button type="button" class="btn" id="ed-restart">Restart from slider shape</button>
+      <button type="button" class="btn" id="ed-more">More dots</button><button type="button" class="btn" id="ed-fewer">Fewer dots</button></div>
+    </div>`;
+  return box;
+}
+let edDrag = -1, edFast = false;
+function edPoints() { return st.shape.points.map(([x, y]) => toWorld(st.shape, x, y)); }
+function drawEditor() {
+  const cv = $("shapeEd"); if (!cv) return;
+  const g = cv.getContext("2d"), S = edFast ? 20 : EDS;
+  g.clearRect(0, 0, ED, ED);
+  g.fillStyle = "#2a2342"; g.fillRect(0, 0, ED, ED);
+  g.strokeStyle = "rgba(255,255,255,0.06)"; g.lineWidth = 1;
+  for (let i = 1; i < 9; i++) { const p = i * ED / 9; g.beginPath(); g.moveTo(p, 0); g.lineTo(p, ED); g.moveTo(0, p); g.lineTo(ED, p); g.stroke(); }
+  g.imageSmoothingEnabled = true;
+  g.drawImage(toCanvas(steakIcon(S, st, "full")), 0, 0, ED, ED);
+  g.setLineDash([10, 8]); g.strokeStyle = "rgba(255,255,255,0.35)"; g.lineWidth = 2; g.strokeRect(1, 1, ED - 2, ED - 2); g.setLineDash([]);
+  if (st.shape.custom) {
+    const k = ED / 9, pts = edPoints();
+    g.strokeStyle = "rgba(196,140,255,0.7)"; g.lineWidth = 2; g.beginPath();
+    pts.forEach(([x, y], i) => i ? g.lineTo(x * k, y * k) : g.moveTo(x * k, y * k)); g.closePath(); g.stroke();
+    pts.forEach(([x, y], i) => { g.beginPath(); g.arc(x * k, y * k, i === edDrag ? 13 : 10, 0, TAU); g.fillStyle = "#c48cff"; g.fill(); g.lineWidth = 3; g.strokeStyle = "#1a0f2e"; g.stroke(); });
+  }
+}
+function syncEditor() {
+  $("m-sliders").setAttribute("aria-pressed", String(!st.shape.custom));
+  $("m-custom").setAttribute("aria-pressed", String(!!st.shape.custom));
+  $("ed-more").disabled = $("ed-fewer").disabled = !st.shape.custom;
+  $("ed-hint").textContent = st.shape.custom
+    ? "Drag a dot to move it. Double-click the outline to add a dot, double-click a dot to remove it. Position, size, tilt, border and lighting still apply."
+    : "The steak follows the sliders below. Switch to Draw my own to drag its outline freely.";
+  drawEditor();
+}
+function startCustom(n) { st.shape.points = shapeToPoints(st.shape, n); st.shape.custom = true; }
+function wireEditor() {
+  const cv = $("shapeEd");
+  const toBase = e => { const r = cv.getBoundingClientRect(); return [(e.clientX - r.left) / r.width * 9, (e.clientY - r.top) / r.height * 9]; };
+  const hit = ([x, y]) => edPoints().findIndex(([px, py]) => Math.hypot(px - x, py - y) < 0.4);
+  let raf = 0;
+  cv.addEventListener("pointerdown", e => {
+    if (!st.shape.custom) return;
+    const i = hit(toBase(e)); if (i < 0) return;
+    edDrag = i; edFast = true; cv.setPointerCapture(e.pointerId); e.preventDefault(); drawEditor();
+  });
+  cv.addEventListener("pointermove", e => {
+    if (edDrag < 0) return;
+    const [x, y] = toBase(e), d = toDesign(st.shape, Math.max(0, Math.min(9, x)), Math.max(0, Math.min(9, y)));
+    st.shape.points[edDrag] = [+d[0].toFixed(3), +d[1].toFixed(3)];
+    if (!raf) raf = requestAnimationFrame(() => { raf = 0; drawEditor(); });
+  });
+  const end = () => { if (edDrag < 0) return; edDrag = -1; edFast = false; changed(true); };
+  cv.addEventListener("pointerup", end); cv.addEventListener("pointercancel", end);
+  cv.addEventListener("dblclick", e => {
+    if (!st.shape.custom) return;
+    const b = toBase(e), i = hit(b), P = st.shape.points;
+    if (i >= 0) { if (P.length > 3) P.splice(i, 1); }
+    else {
+      const W = edPoints(); let best = 0, bd = Infinity;
+      for (let k = 0; k < W.length; k++) {
+        const a = W[k], c = W[(k + 1) % W.length], ex = c[0] - a[0], ey = c[1] - a[1];
+        const t = sat(((b[0] - a[0]) * ex + (b[1] - a[1]) * ey) / (ex * ex + ey * ey || 1));
+        const dd = Math.hypot(a[0] + ex * t - b[0], a[1] + ey * t - b[1]); if (dd < bd) { bd = dd; best = k; }
+      }
+      const d = toDesign(st.shape, b[0], b[1]); P.splice(best + 1, 0, [+d[0].toFixed(3), +d[1].toFixed(3)]);
+    }
+    changed(true);
+  });
+  $("m-sliders").addEventListener("click", () => { st.shape.custom = false; changed(true); });
+  $("m-custom").addEventListener("click", () => { if (!st.shape.points || st.shape.points.length < 3) startCustom(12); st.shape.custom = true; changed(true); });
+  $("ed-restart").addEventListener("click", () => { startCustom(Math.max(12, st.shape.points.length || 12)); changed(true); });
+  $("ed-more").addEventListener("click", () => {      // add a dot halfway along every side
+    const P = st.shape.points; if (P.length >= 48) return;
+    st.shape.points = P.flatMap((p, i) => { const q = P[(i + 1) % P.length]; return [p, [+((p[0] + q[0]) / 2).toFixed(3), +((p[1] + q[1]) / 2).toFixed(3)]]; });
+    changed(true);
+  });
+  $("ed-fewer").addEventListener("click", () => {     // keep every other dot (never fewer than 3)
+    const P = st.shape.points; if (P.length <= 3) return;
+    const half = P.filter((_, i) => i % 2 === 0); st.shape.points = half.length >= 3 ? half : P.slice(0, P.length - 1);
+    changed(true);
+  });
+}
 const idOf = path => "f-" + path.replace(/\./g, "-");
-const fmt = (ctl, v) => ctl.type === "speed" ? SPEED[5 - v] : ctl.type === "deg" ? Math.round(-v * 180 / Math.PI) + "°" : (+v).toFixed(2);
+const fmt = (ctl, v) => ctl.type === "speed" ? SPEED[5 - v] : ctl.type === "deg" ? Math.round(-v * 180 / Math.PI) + "°"
+  : ctl.type === "angle" ? Math.round(v) + "°" : ctl.path === "shape.burnCount" ? (+v === 0 ? "design" : String(v)) : (+v).toFixed(2);
 const isSteak = path => path.startsWith("shape") || path.startsWith("steakCol");
 function linkShades() {
   const m = unhex(st.steakCol.meat);
@@ -782,6 +968,7 @@ for (const sec of SECTIONS) {
   const h = document.createElement("h2"); h.id = "h-" + sec.id;
   const dot = document.createElement("span"); dot.className = "dot" + (sec.cls ? " " + sec.cls : ""); h.append(dot, sec.title); card.appendChild(h);
   if (sec.hint) { const p = document.createElement("p"); p.className = "hint"; p.textContent = sec.hint; card.appendChild(p); }
+  if (sec.editor) card.appendChild(makeEditor());
   if (sec.chips) { const d = document.createElement("div"); d.className = "designs"; d.id = "chips-" + sec.chips; d.setAttribute("role", "group"); d.setAttribute("aria-label", sec.title); card.appendChild(d); }
   for (const g of sec.groups) {
     if (g.label) { const l = document.createElement("p"); l.className = "group-label"; l.textContent = g.label; card.appendChild(l); }
@@ -919,6 +1106,7 @@ requestAnimationFrame(drawHud);
 let timer = null;
 function changed(thumbsToo) {
   save(); clearTimeout(timer);
+  if ($("shapeEd")) syncEditor();
   timer = setTimeout(() => { buildPreview(); if (thumbsToo) drawThumbs(); }, 120);
 }
 $("r256").addEventListener("click", () => { st.res = 256; syncInputs(); save(); });
@@ -1022,5 +1210,6 @@ $("build").addEventListener("click", async () => {
 });
 
 syncInputs();
+wireEditor(); syncEditor();
 setTimeout(() => { buildPreview(); drawThumbs(); }, 0);
 </script>
