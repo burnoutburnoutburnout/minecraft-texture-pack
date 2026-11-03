@@ -338,26 +338,31 @@ class Renderer:
         return to_rgba(col, alpha)
 
     # ---------------- steak (hunger) ----------------
+    STEAK_ANGLE = -0.5
+
     def steak_slab(self, X, Y, drop=0.0):
-        """Rounded, slightly lumpy slab (superellipse) tilted up to the right."""
-        cx, cy, rx, ry, a, p = 4.5, 4.05 + drop, 3.85, 2.4, -0.42, 2.6
+        """Long rounded slab tilted up to the right (the Minecraft steak silhouette),
+        with a gently lumpy top edge. Returns (signed distance, along, across)."""
+        cx, cy, rx, ry, p = 4.5, 4.15 + drop, 3.95, 2.2, 2.4
+        a = self.STEAK_ANGLE
         dx, dy = X - cx, Y - cy
         ex = dx * math.cos(a) + dy * math.sin(a)
         ey = -dx * math.sin(a) + dy * math.cos(a)
-        ry_ = ry + np.where(ey < 0, 0.2 * np.sin(ex * 1.3 + 0.6), 0.0)
+        ry_ = ry + np.where(ey < 0, 0.16 * np.sin(ex * 1.6 + 0.4), 0.0)
         f = (np.abs(ex / rx) ** p + np.abs(ey / ry_) ** p) ** (1.0 / p) - 1.0
         gy, gx = np.gradient(f, 1.0 / self.S)
-        return f / np.maximum(np.hypot(gx, gy), 1e-4)
+        return f / np.maximum(np.hypot(gx, gy), 1e-4), ex, ey
 
     def steak(self, kind="full", flash=False, hunger=False):
-        """Cartoon cooked steak: bold outline, cel shading, darker seared blotches,
-        and a visible thick side so it reads as a slab of meat."""
+        """Cartoon HD version of the Minecraft steak: same long diagonal shape and
+        browns (lighter top-left, darker bottom-right rim), bold outline, cel
+        shading and black grill burn lines."""
         X, Y = self.grid(9, 9)
-        top = self.steak_slab(X, Y)
-        side = self.steak_slab(X, Y, drop=0.8)
+        top, ex, ey = self.steak_slab(X, Y)
+        side, _, _ = self.steak_slab(X, Y, drop=0.65)
         body = np.minimum(top, side)
         alpha = self.cov(body)
-        ow = 0.45
+        ow = 0.42
         inner = self.cov(body + ow)
         if kind == "container":
             fill = rgb(26, 34, 14) if hunger else rgb(40, 26, 20)
@@ -365,27 +370,40 @@ class Renderer:
             col = mix(outline, np.broadcast_to(fill, X.shape + (3,)), inner)
             col = mix(col, rgb(28, 18, 13), self.cov(np.abs(top) - 0.1) * (side < 0) * inner)
         else:
-            # top face
-            n = fbm(2, X * 8.0 + 20.0, Y * 8.0 + 60.0)
-            face = mix(rgb(150, 74, 48), rgb(136, 64, 40), sat(0.5 + 0.4 * n))
-            face = mix(face, rgb(108, 48, 30), smoothstep(0.3, 0.5, n) * 0.85)  # seared patches
-            face = mix(face, rgb(170, 94, 64), smoothstep(-0.55, -0.8, n) * 0.8)  # juicy spots
-            dots = samp(NOISE[5], X * 22.0, Y * 22.0)
-            face = mix(face, rgb(96, 42, 26), smoothstep(1.2, 1.4, dots))       # speckles
-            # cel shading from the top face's edge normal (light from the top-left)
+            # top face: Minecraft-steak browns with soft, chunky lighter/darker patches
+            n = fbm(2, X * 6.0 + 20.0, Y * 6.0 + 60.0)
+            face = mix(rgb(156, 90, 64), rgb(142, 78, 54), sat(0.5 + 0.4 * n))
+            face = mix(face, rgb(120, 62, 42), smoothstep(0.35, 0.6, n) * 0.8)
+            face = mix(face, rgb(178, 110, 80), smoothstep(-0.5, -0.8, n) * 0.85)
+            # broad light from the top-left, darker toward the bottom-right
+            face = face * (1.08 - 0.22 * sat((ey + 1.6) / 3.2))[..., None]
+            # cel shading on the rim of the top face
             gy, gx = np.gradient(top, 1.0 / self.S)
             facing = -(gx + gy) / math.sqrt(2.0)
-            edge = smoothstep(-1.1, -0.35, top)
-            face = mix(face, rgb(190, 116, 84), edge * smoothstep(0.2, 0.7, facing) * 0.85)
-            face = mix(face, rgb(98, 44, 28), edge * smoothstep(0.2, 0.7, -facing) * 0.7)
-            gl = sd_ellipse(X, Y, 3.0, 3.0, 1.05, 0.32, -0.42)
-            face = mix(face, rgb(255, 236, 222), sat(-gl / 0.35) * 0.55)
-            # side of the slab
-            sidec = mix(rgb(100, 44, 28), rgb(70, 30, 18), sat((X - 1.0) / 7.0))
+            edge = smoothstep(-1.0, -0.3, top)
+            face = mix(face, rgb(196, 128, 96), edge * smoothstep(0.2, 0.7, facing) * 0.85)
+            face = mix(face, rgb(102, 50, 32), edge * smoothstep(0.2, 0.7, -facing) * 0.6)
+            # black grill burn lines across the steak (slightly slanted, tapered ends)
+            u = ex + 0.55 * ey
+            burn = np.zeros_like(X)
+            for c in (-2.1, 0.0, 2.1):
+                w = 0.2 * (1.0 - 0.45 * sat(np.abs(ey) / 2.0))
+                burn = np.maximum(burn, self.cov(np.abs(u - c) - w))
+            burn = burn * smoothstep(-0.2, -0.55, top)
+            # charred halo around each burn, then the black line itself
+            halo = np.zeros_like(X)
+            for c in (-2.1, 0.0, 2.1):
+                halo = np.maximum(halo, np.exp(-((u - c) / 0.42) ** 2))
+            face = mix(face, rgb(92, 44, 28), halo * smoothstep(-0.2, -0.55, top) * 0.5)
+            face = mix(face, rgb(18, 10, 7), burn)
+            # small glossy highlight
+            gl = sd_ellipse(X, Y, 2.55, 4.0, 0.9, 0.26, self.STEAK_ANGLE)
+            face = mix(face, rgb(255, 236, 222), sat(-gl / 0.3) * 0.5)
+            # dark bottom-right rim (the thickness of the steak)
+            sidec = mix(rgb(96, 46, 30), rgb(66, 30, 18), sat((X - 1.0) / 7.0))
             col = np.where((top < 0)[..., None], face, sidec)
-            # line where the top face meets the side
-            col = mix(col, rgb(64, 30, 16), self.cov(np.abs(top) - 0.09) * (side < 0))
-            outline = rgb(52, 22, 12)
+            col = mix(col, rgb(54, 24, 14), self.cov(np.abs(top) - 0.08) * (side < 0))
+            outline = rgb(40, 16, 8)
             if hunger:
                 col = mix(col, rgb(100, 150, 46), 0.5)
                 outline = rgb(20, 34, 8)

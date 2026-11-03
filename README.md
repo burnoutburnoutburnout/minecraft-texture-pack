@@ -5,7 +5,7 @@
 A HUD pack for **Minecraft 1.8.9** with:
 
 - **Animated galaxy hearts**: smooth, high-resolution hearts filled with a realistic deep-space starfield (dark indigo, purple nebula clouds, twinkling stars) that slowly drifts. Hardcore hearts animate too.
-- **Steak hunger bar**: cartoon-style cooked steaks (Minecraft's steak, redrawn smooth at full resolution) replace the drumsticks. There are also matching "hunger effect" (green) and flashing variants.
+- **Steak hunger bar**: cartoon HD steaks shaped like the Minecraft steak, with black grill burn lines, replace the drumsticks. There are also matching "hunger effect" (green) and flashing variants.
 - **Animated galaxy XP bar**: the same starfield style shifted to blue/cyan, with nebula clouds that flow along the bar.
 - Matching smooth galaxy armor, plus air bubbles, boss bar, horse-jump bar, tab-list ping icons and crosshair.
 
