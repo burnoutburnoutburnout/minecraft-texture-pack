@@ -18,7 +18,7 @@ Usage:
     python3 generator/build.py                  # builds 256x and 512x into dist/
     python3 generator/build.py --res 256        # only one resolution
     python3 generator/build.py --preview        # also writes preview images
-    python3 generator/build.py --steak bitten   # choose a steak design
+    python3 generator/build.py --steak cracked  # choose a steak design
 
 Requires: numpy, Pillow
 """
@@ -213,51 +213,21 @@ WHITE = rgb(255, 255, 255)
 # --------------------------------------------------------------------------- #
 # Steak variants (pick one with --steak NAME; see previews/steak-variants.png)
 # --------------------------------------------------------------------------- #
-DARK_STEAK = dict(base=(128, 66, 44), mid=(114, 56, 36), dark=(88, 40, 24),
-                  light=(150, 86, 60), rim=(168, 104, 76), side=(80, 38, 22),
-                  side2=(52, 22, 12), outline=(28, 11, 5))
+# All designs share the same dark cartoon steak (Minecraft steak shape and angle,
+# rough border) and differ only in surface texture.
+DARK_STEAK = dict(base=(112, 54, 36), mid=(98, 46, 30), dark=(66, 28, 16),
+                  light=(140, 76, 52), rim=(166, 100, 72), side=(64, 26, 14),
+                  side2=(42, 15, 7), outline=(18, 7, 3))
 
-STEAK_BASE = dict(cx=4.5, cy=4.2, rx=3.95, ry=2.2, p=2.4, angle=-0.5, lump=0.16,
-                  lump_freq=1.6, lump_bottom=0.4, taper=0.0, bend=0.0, notch=None,
-                  thick=0.65, outline_w=0.42, outline_var=0.0, sticker=0.0,
-                  colors=DARK_STEAK, burns=(-2.1, 0.0, 2.1), burn_slant=0.55, burn_w=0.2,
-                  crosshatch=False, bone=None, fat=False, char=0.0, flat=False,
-                  marble=0.0, ember=0.0, glaze=0.0, gloss=0.45, seed=2)
+STEAK_BASE = dict(colors=DARK_STEAK, seed=2)
 
+STEAK_VARIANTS = {name: dict(texture=name) for name in (
+    "grill", "crosshatch", "speckle", "mosaic", "charred",
+    "embers", "grain", "pepper-crust", "cel-bands", "halftone",
+    "ink-hatch", "glazed", "bubbly", "cracked", "diamond",
+    "brushstroke", "ash", "seared-rings", "herb-crust", "marble-swirl")}
 
-def steak_colors(base, mid, dark, light, rim, side, side2, outline):
-    return dict(base=base, mid=mid, dark=dark, light=light, rim=rim, side=side,
-                side2=side2, outline=outline)
-
-
-# Every design keeps the Minecraft steak's tilted slab; each has its own colours,
-# outline shape and surface style.
-STEAK_VARIANTS = {
-    # blackened crust, crosshatch grill, glowing embers in the char lines
-    "char-cross": dict(
-        burns=(-2.4, -0.8, 0.8, 2.4), burn_w=0.13, crosshatch=True, burn_slant=1.0,
-        char=0.8, ember=0.9, gloss=0.12,
-        colors=steak_colors((78, 36, 24), (66, 30, 20), (40, 18, 12), (98, 48, 32),
-                            (124, 64, 42), (52, 22, 14), (34, 14, 8), (12, 5, 2))),
-    # deep red mahogany BBQ glaze, wet highlights, thick parallel burns
-    "tapered": dict(
-        taper=-0.28, rx=4.0, burns=(-2.2, -0.4, 1.4), burn_w=0.24, glaze=1.0,
-        colors=steak_colors((132, 42, 30), (116, 34, 24), (84, 22, 16), (160, 62, 44),
-                            (190, 90, 66), (82, 24, 16), (54, 14, 10), (34, 8, 6))),
-    # lighter golden grilled steak with a bite showing the pink inside
-    "bitten": dict(
-        notch=(3.3, -1.55, 1.0), burns=(-1.9, -0.3), burn_slant=-1.1, burn_w=0.22,
-        gloss=0.4,
-        colors=steak_colors((170, 104, 66), (156, 92, 58), (128, 72, 44), (192, 128, 88),
-                            (214, 152, 110), (116, 64, 38), (86, 44, 24), (54, 26, 12))),
-    # flat cartoon: clean bright tones, hard shadow, bold burns, white shine
-    "flat-toon": dict(
-        flat=True, gloss=0.9, burns=(-2.0, 0.0, 2.0), burn_w=0.27, lump=0.08,
-        outline_w=0.5,
-        colors=steak_colors((188, 98, 56), (150, 70, 38), (150, 70, 38), (188, 98, 56),
-                            (232, 146, 96), (118, 54, 28), (88, 38, 18), (36, 14, 4))),
-}
-STEAK_DEFAULT = "char-cross"
+STEAK_DEFAULT = "grill"
 
 
 # --------------------------------------------------------------------------- #
@@ -389,152 +359,229 @@ class Renderer:
         return to_rgba(col, alpha)
 
     # ---------------- steak (hunger) ----------------
-    # ---------------- steak (hunger) ----------------
-    def steak_slab(self, X, Y, V, drop=0.0):
-        """Rounded slab (superellipse) with a lumpy top edge.
-        Returns (signed distance, along-axis coord, across-axis coord)."""
-        a = V["angle"]
-        dx, dy = X - V["cx"], Y - (V["cy"] + drop)
+    # One shared dark, cartoon steak (Minecraft steak shape and angle, rough uneven
+    # border). The designs in STEAK_VARIANTS differ only in their surface texture.
+    def steak_shape(self, X, Y, drop=0.0):
+        a = -0.5
+        dx, dy = X - 4.5, Y - (4.2 + drop)
         ex = dx * math.cos(a) + dy * math.sin(a)
         ey = -dx * math.sin(a) + dy * math.cos(a)
-        rx = V["rx"]
-        ey = ey - V["bend"] * ((ex / rx) ** 2 - 0.35)          # kidney / banana curve
-        lump = V["lump"] * np.sin(ex * V["lump_freq"] + 0.4)
-        ry_ = V["ry"] * (1.0 + V["taper"] * ex / rx)
-        ry_ = ry_ + np.where(ey < 0, lump, lump * V["lump_bottom"])
-        p = V["p"]
+        rx, ry, p = 3.95, 2.2, 2.4
+        ry_ = ry + np.where(ey < 0, 0.16 * np.sin(ex * 1.6 + 0.4), 0.06 * np.sin(ex * 1.6 + 0.4))
         f = (np.abs(ex / rx) ** p + np.abs(ey / ry_) ** p) ** (1.0 / p) - 1.0
         gy, gx = np.gradient(f, 1.0 / self.S)
         d = f / np.maximum(np.hypot(gx, gy), 1e-4)
-        if V["notch"]:
-            nx, ny, nr = V["notch"]
-            d = -smin(-d, np.hypot(ex - nx, ey - ny) - nr, 0.35)  # a bite out of the edge
+        # rough, uneven border (same noise for top and side so they line up)
+        Yr = Y - drop
+        d = d + 0.13 * samp(NOISE[4], X * 4.0 + 3.0, Yr * 4.0) \
+              + 0.05 * samp(NOISE[2], X * 13.0, Yr * 13.0)
         return d, ex, ey
 
-    def steak_bone(self, X, Y, V, ex, ey):
-        """Bone sticking out of the steak's left end (tomahawk style)."""
-        rx = V["rx"]
-        seg_lo, seg_hi = -rx - 1.3, -rx + 0.8
-        t = np.clip(ex, seg_lo, seg_hi)
-        shaft = np.hypot(ex - t, ey - 0.25) - 0.6
-        knob = np.minimum(np.hypot(ex - seg_lo, ey - 0.25 + 0.5) - 0.62,
-                          np.hypot(ex - seg_lo, ey - 0.25 - 0.5) - 0.62)
-        return smin(shaft, knob, 0.25)
+    @staticmethod
+    def voronoi(u, v, seed=0):
+        """Jittered-grid Voronoi. Returns (F1, F2, cell hash, nearest point dx, dy)."""
+        iu, iv = np.floor(u), np.floor(v)
+        f1 = np.full(u.shape, 9.0, np.float32)
+        f2 = np.full(u.shape, 9.0, np.float32)
+        hid = np.zeros(u.shape, np.float32)
+        ndx = np.zeros(u.shape, np.float32)
+        ndy = np.zeros(u.shape, np.float32)
+        for dj in (-1, 0, 1):
+            for di in (-1, 0, 1):
+                cu, cv = iu + di, iv + dj
+                h1 = np.mod(np.sin(cu * 127.1 + cv * 311.7 + seed * 17.0) * 43758.5453, 1.0)
+                h2 = np.mod(np.sin(cu * 269.5 + cv * 183.3 + seed * 31.0) * 24634.6345, 1.0)
+                h3 = np.mod(np.sin(cu * 419.2 + cv * 371.9 + seed * 7.0) * 13758.937, 1.0)
+                px_, py_ = cu + 0.15 + 0.7 * h1, cv + 0.15 + 0.7 * h2
+                ddx, ddy = u - px_, v - py_
+                d = np.hypot(ddx, ddy)
+                closer = d < f1
+                f2 = np.where(closer, f1, np.minimum(f2, d))
+                hid = np.where(closer, h3, hid)
+                ndx = np.where(closer, ddx, ndx)
+                ndy = np.where(closer, ddy, ndy)
+                f1 = np.where(closer, d, f1)
+        return f1, f2, hid, ndx, ndy
+
+    def steak_texture(self, tex, X, Y, ex, ey, top, C, seed):
+        """Paint the top face of the steak with one of the texture styles."""
+        on = smoothstep(-0.15, -0.45, top)
+        n = fbm(seed, X * 6.0 + 20.0, Y * 6.0 + 60.0)
+        face = mix(C["base"], C["mid"], sat(0.5 + 0.4 * n))
+        face = face * (1.08 - 0.25 * sat((ey + 1.6) / 3.2))[..., None]
+        lit = sat(0.55 - ey / 3.0)                      # light from the top-left
+        black = rgb(16, 8, 5)
+        rng = np.random.default_rng(seed + 77)
+
+        def burns(cs, k, w):
+            u = (ex + k * ey) / math.sqrt(1 + k * k)
+            b = np.zeros_like(X)
+            h = np.zeros_like(X)
+            for c in cs:
+                ww = w * (1.0 - 0.45 * sat(np.abs(ey) / 2.0))
+                b = np.maximum(b, self.cov(np.abs(u - c) - ww))
+                h = np.maximum(h, np.exp(-((u - c) / (w * 2.2)) ** 2))
+            return b, h
+
+        if tex == "grill":
+            b, h = burns((-2.1, 0.0, 2.1), 0.55, 0.21)
+            face = mix(face, C["dark"], h * 0.55)
+            face = mix(face, black, b)
+        elif tex == "crosshatch":
+            b1, h1 = burns((-2.4, -0.8, 0.8, 2.4), 1.0, 0.13)
+            b2, h2 = burns((-2.4, -0.8, 0.8, 2.4), -2.2, 0.13)
+            face = mix(face, C["dark"], np.maximum(h1, h2) * 0.45)
+            face = mix(face, black, np.maximum(b1, b2))
+        elif tex == "speckle":
+            face = mix(C["base"], C["mid"], 0.4) * (1.05 - 0.2 * sat((ey + 1.6) / 3.2))[..., None]
+            for i in range(70):
+                sx, sy = rng.uniform(-3.8, 3.8), rng.uniform(-2.2, 2.2)
+                r = rng.uniform(0.09, 0.28)
+                c = [C["dark"], C["light"], C["dark"] * 0.8][i % 3]
+                face = mix(face, c, self.cov(np.hypot(ex - sx, (ey - sy) * 1.3) - r))
+        elif tex == "mosaic":
+            f1, f2, hid, _, _ = self.voronoi(ex / 0.85, ey / 0.85, seed)
+            tones = [C["dark"], C["mid"], C["base"], C["light"]]
+            idx = np.clip((hid * 4).astype(int), 0, 3)
+            face = np.choose(idx[..., None], tones)
+            face = face * (0.9 + 0.2 * lit)[..., None]
+            face = mix(face, C["dark"] * 0.7, self.cov((f2 - f1) * 0.85 - 0.05))
+        elif tex == "charred":
+            n2 = samp(NOISE[(seed + 3) % 6], X * 6.0 + 5.0, Y * 6.0 + 9.0) \
+                + 0.25 * samp(NOISE[(seed + 2) % 6], X * 20.0, Y * 20.0)
+            face = mix(face, rgb(40, 22, 16), smoothstep(0.2, 0.35, n2) * 0.9)
+            face = mix(face, rgb(18, 10, 8), smoothstep(0.55, 0.65, n2))
+            face = mix(face, rgb(90, 80, 74), self.cov(np.abs(n2 - 0.6) - 0.025) * 0.6)
+        elif tex == "embers":
+            face = mix(face, rgb(42, 20, 14), 0.75)
+            lv = np.minimum(np.abs(samp(NOISE[(seed + 4) % 6], X * 7.0 + 3.0, Y * 7.0 + 8.0)),
+                            np.abs(samp(NOISE[(seed + 1) % 6], X * 5.0 + 9.0, Y * 5.0 + 2.0)) * 1.3)
+            face = mix(face, rgb(255, 84, 18), smoothstep(0.4, 0.06, lv) * 0.6)
+            face = mix(face, rgb(255, 214, 96), self.cov((lv - 0.06) * 0.35))
+        elif tex == "grain":
+            fib = np.sin((ey + ex * 0.35) * 9.0 + 2.2 * fbm(seed + 2, X * 3, Y * 3))
+            face = mix(face, C["dark"], smoothstep(0.4, 0.75, fib) * 0.85)
+            face = mix(face, C["light"], smoothstep(-0.65, -0.95, fib) * 0.7)
+        elif tex == "pepper-crust":
+            f1, f2, hid, _, _ = self.voronoi(ex / 0.3, ey / 0.3, seed + 5)
+            r = 0.2 + 0.18 * hid
+            face = mix(face, rgb(24, 16, 12), self.cov((f1 - r) * 0.3) * (hid > 0.25))
+            face = mix(face, rgb(120, 100, 86), self.cov((f1 - r * 0.45) * 0.3) * (hid > 0.85))
+        elif tex == "cel-bands":
+            L = sat(0.5 - ey / 2.6 + 0.35 * smoothstep(-0.9, -0.2, top) * sat(-ey))
+            face = np.where((L > 0.62)[..., None], C["light"],
+                            np.where((L > 0.4)[..., None], C["base"], C["dark"]))
+            face = mix(face, rgb(255, 226, 210),
+                       self.cov(sd_ellipse(ex, ey, -1.9, -1.2, 0.8, 0.2, 0.0)))
+        elif tex == "halftone":
+            face = np.broadcast_to(C["base"], X.shape + (3,)).copy()
+            shade = sat((ey + 0.4) / 2.4)
+            per = 0.4
+            gu = (X + Y) / (math.sqrt(2) * per)
+            gv = (X - Y) / (math.sqrt(2) * per)
+            r = np.hypot(np.mod(gu, 1.0) - 0.5, np.mod(gv, 1.0) - 0.5) * per
+            face = mix(face, C["dark"] * 0.6, self.cov(r - per * 0.62 * np.sqrt(shade)))
+            face = mix(face, C["light"], self.cov(sd_ellipse(ex, ey, -1.8, -1.2, 1.1, 0.25, 0.0)))
+        elif tex == "ink-hatch":
+            face = mix(face, C["light"], 0.35)
+            shade = sat((ey + 0.8) / 2.6)
+            h1 = np.abs(np.mod((X - Y) * 3.6, 1.0) - 0.5) / 3.6
+            h2 = np.abs(np.mod((X + Y) * 3.6, 1.0) - 0.5) / 3.6
+            face = mix(face, black, self.cov(h1 - 0.035) * smoothstep(0.25, 0.32, shade))
+            face = mix(face, black, self.cov(h2 - 0.035) * smoothstep(0.6, 0.67, shade))
+        elif tex == "glazed":
+            face = mix(face, rgb(96, 30, 20), 0.5)
+            face = mix(face, rgb(150, 60, 40), lit * 0.4)
+            for (hx, hy, hrx, hry, a) in ((-2.1, -1.0, 0.9, 0.2, 0.9), (0.4, -1.35, 1.25, 0.16, 0.75),
+                                           (2.4, -0.75, 0.5, 0.13, 0.6), (-0.8, 0.8, 0.6, 0.11, 0.4),
+                                           (1.4, 0.4, 0.3, 0.08, 0.5)):
+                gl = sd_ellipse(ex, ey, hx, hy, hrx, hry, 0.0)
+                face = mix(face, rgb(255, 228, 212), sat(-gl / 0.1) * a)
+        elif tex == "bubbly":
+            f1, f2, hid, ddx, ddy = self.voronoi(ex / 0.62, ey / 0.62, seed + 9)
+            rr = 0.22 + 0.16 * hid
+            inside = self.cov((f1 - rr) * 0.62)
+            face = mix(face, C["dark"], inside * 0.85)
+            rim = inside * smoothstep(rr * 0.55, rr, f1) * sat(-(ddx + ddy) / (f1 + 1e-3))
+            face = mix(face, C["rim"], rim * 0.9)
+            face = mix(face, rgb(255, 230, 214), self.cov((np.hypot(ddx + rr * 0.35, ddy + rr * 0.35)
+                                                           - rr * 0.18) * 0.62) * inside * 0.7)
+        elif tex == "cracked":
+            f1, f2, hid, _, _ = self.voronoi(ex / 1.05, ey / 1.05, seed + 3)
+            face = face * (0.85 + 0.3 * hid)[..., None]
+            gap = (f2 - f1) * 1.05
+            face = mix(face, C["light"], smoothstep(0.32, 0.1, gap) * 0.45)
+            face = mix(face, rgb(24, 10, 6), self.cov(gap - 0.07))
+        elif tex == "diamond":
+            s = 0.95
+            a_ = (ex + ey * 1.4) / s
+            b_ = (ex - ey * 1.4) / s
+            fa, fb = np.mod(a_, 1.0), np.mod(b_, 1.0)
+            face = mix(face, C["light"], (smoothstep(0.28, 0.08, fa) + smoothstep(0.28, 0.08, fb)) * 0.45)
+            face = mix(face, C["dark"], (smoothstep(0.72, 0.92, fa) + smoothstep(0.72, 0.92, fb)) * 0.5)
+            groove = np.minimum(np.minimum(fa, 1 - fa), np.minimum(fb, 1 - fb)) * s
+            face = mix(face, black, self.cov(groove - 0.06))
+        elif tex == "brushstroke":
+            v_ = fbm(seed + 1, ex * 1.6 + 40.0, ey * 9.0 + 9.0) + 0.6 * (-ey / 2.2)
+            levels = np.clip(np.floor((v_ + 1.2) / 0.6), 0, 4).astype(int)
+            tones = [C["dark"], C["mid"], C["base"], C["light"], C["rim"]]
+            face = np.choose(levels[..., None], tones)
+        elif tex == "ash":
+            n4 = fbm(seed + 5, X * 7.0, Y * 7.0)
+            face = mix(face, rgb(140, 132, 126), smoothstep(0.2, 0.7, n4) * 0.8)
+            dust = samp(NOISE[1], X * 36.0, Y * 36.0)
+            face = mix(face, rgb(206, 200, 194), self.cov((1.4 - dust) * 0.2))
+            b, h = burns((-2.0, 0.0, 2.0), 0.55, 0.15)
+            face = mix(face, black, b)
+        elif tex == "seared-rings":
+            dd = -top
+            k = np.floor(dd / 0.45)
+            tones = np.clip(k, 0, 4).astype(int)
+            pal5 = [rgb(40, 18, 10), rgb(66, 30, 18), C["mid"], C["base"], C["light"]]
+            face = np.choose(tones[..., None], pal5)
+            face = mix(face, black, self.cov(np.abs(np.mod(dd, 0.45) - 0.0) - 0.02) * (dd < 1.9))
+        elif tex == "herb-crust":
+            face = mix(face, C["dark"], 0.3)
+            f1, f2, hid, ddx, ddy = self.voronoi(ex / 0.28, ey / 0.28, seed + 6)
+            fleck = self.cov((np.hypot(ddx * 1.8, ddy * 0.7) - 0.28) * 0.28)
+            greens = mix(rgb(54, 104, 36), rgb(128, 170, 70), hid)
+            face = mix(face, greens, fleck * (hid > 0.35))
+            face = mix(face, rgb(220, 196, 150), fleck * (hid < 0.1))
+        elif tex == "marble-swirl":
+            w = np.sin(ex * 2.1 + 1.6 * np.sin(ey * 2.3 + ex * 0.8) + 0.5) \
+                * np.cos(ey * 1.7 - 0.6 * ex)
+            line = np.abs(w)
+            face = mix(face, rgb(150, 96, 80), smoothstep(0.2, 0.06, line))
+            face = mix(face, rgb(226, 186, 168), smoothstep(0.09, 0.03, line))
+            b, h = burns((-2.5, 2.4), 0.55, 0.18)
+            face = mix(face, black, b)
+        return face
 
     def steak(self, kind="full", flash=False, hunger=False, variant=None):
-        """Cartoon HD steak in the style of the Minecraft steak. Its shape, colours,
-        burn lines and extras (bones, fat rim, char) come from STEAK_VARIANTS."""
         V = dict(STEAK_BASE, **STEAK_VARIANTS[variant or STEAK_DEFAULT])
         X, Y = self.grid(9, 9)
-        top, ex, ey = self.steak_slab(X, Y, V)
-        side, _, _ = self.steak_slab(X, Y, V, drop=V["thick"])
+        top, ex, ey = self.steak_shape(X, Y)
+        side, _, _ = self.steak_shape(X, Y, drop=0.65)
         body = np.minimum(top, side)
-        bone = None
-        if V["bone"] == "tomahawk":
-            bone = self.steak_bone(X, Y, V, ex, ey)
-            body = np.minimum(body, bone)
-        sticker = V["sticker"]
-        alpha = self.cov(body - sticker)
-        ow = V["outline_w"]
-        if V["outline_var"]:
-            ow = ow * (1.0 + V["outline_var"] * samp(NOISE[1], X * 4.0 + 7.0, Y * 4.0))
-        inner = self.cov(body + ow)
+        alpha = self.cov(body)
+        inner = self.cov(body + 0.42)
+        C = {k: rgb(*v) for k, v in V["colors"].items()}
         if kind == "container":
-            fill = rgb(26, 34, 14) if hunger else rgb(36, 22, 16)
-            outline = rgb(250, 240, 232) if flash else rgb(12, 6, 3)
+            fill = rgb(26, 34, 14) if hunger else rgb(34, 20, 14)
+            outline = rgb(250, 240, 232) if flash else rgb(10, 5, 2)
             col = mix(outline, np.broadcast_to(fill, X.shape + (3,)), inner)
-            col = mix(col, rgb(24, 15, 10), self.cov(np.abs(top) - 0.1) * (side < 0) * inner)
+            col = mix(col, rgb(22, 13, 9), self.cov(np.abs(top) - 0.1) * (side < 0) * inner)
         else:
-            C = {k: rgb(*v) for k, v in V["colors"].items()}
-            on_face = smoothstep(-0.2, -0.55, top)
-            # top face: chunky lighter/darker patches
-            n = fbm(V["seed"], X * 6.0 + 20.0, Y * 6.0 + 60.0)
-            if V["flat"]:
-                # flat cartoon: one clean tone + a hard-edged shadow on the lower half
-                face = np.broadcast_to(C["base"], X.shape + (3,)).copy()
-                face = mix(face, C["mid"], smoothstep(0.5, 0.58, ey))
-            else:
-                face = mix(C["base"], C["mid"], sat(0.5 + 0.4 * n))
-                face = mix(face, C["dark"], smoothstep(0.35, 0.6, n) * 0.8)
-                face = mix(face, C["light"], smoothstep(-0.5, -0.8, n) * 0.8)
-            if V["marble"]:
-                m = fbm(V["seed"] + 1, X * 5.0 + 40.0, Y * 9.0 + 11.0)
-                streak = np.exp(-(m / 0.15) ** 2) * smoothstep(-0.3, -0.8, top)
-                face = mix(face, rgb(206, 160, 138), streak * V["marble"])
-            if V["char"]:
-                n2 = fbm(V["seed"] + 3, X * 7.0 + 5.0, Y * 7.0 + 9.0)
-                face = mix(face, rgb(24, 12, 8), smoothstep(0.6, 0.95, n2) * V["char"])
-            if not V["flat"]:
-                face = face * (1.06 - 0.22 * sat((ey + 1.6) / 3.2))[..., None]
-            # cel shading on the rim of the top face (light from the top-left)
+            face = self.steak_texture(V["texture"], X, Y, ex, ey, top, C, V["seed"])
+            # cartoon rim light on the top-left edge, shade on the bottom-right
             gy, gx = np.gradient(top, 1.0 / self.S)
             facing = -(gx + gy) / math.sqrt(2.0)
-            edge = smoothstep(-1.0, -0.3, top)
-            if V["flat"]:
-                band = smoothstep(-0.62, -0.55, top)
-                face = mix(face, C["rim"], band * smoothstep(0.25, 0.3, facing))
-            else:
-                face = mix(face, C["rim"], edge * smoothstep(0.2, 0.7, facing) * 0.8)
-                face = mix(face, C["side"], edge * smoothstep(0.2, 0.7, -facing) * 0.6)
-            # fat rim along the upper edge
-            if V["fat"]:
-                band = smoothstep(-0.75, -0.6, top) * (ey < 0) * smoothstep(-0.3, -1.0, ey)
-                fat = mix(rgb(206, 170, 128), rgb(236, 210, 174), smoothstep(-0.2, -0.6, top))
-                face = mix(face, fat, band)
-                face = mix(face, C["side"], self.cov(np.abs(top + 0.72) - 0.05) * band * 0.8)
-            # T-bone in the middle of the face
-            if V["bone"] == "t":
-                stem = sd_box(ex, ey, -0.7, 0.0, 0.26, V["ry"] - 0.55, 0.2)
-                bar = sd_box(ex, ey, 0.6, -0.15, 1.3, 0.24, 0.2)
-                tb = np.minimum(stem, bar)
-                face = mix(face, rgb(60, 34, 22), self.cov(tb - 0.12))
-                face = mix(face, rgb(238, 228, 208), self.cov(tb))
-                face = mix(face, rgb(196, 182, 160), self.cov(tb) * sat((ey + 0.2) / 0.6) * 0.5)
-            # black grill burn lines
-            burn = np.zeros_like(X)
-            halo = np.zeros_like(X)
-            fams = [V["burn_slant"]] + ([-V["burn_slant"] - 1.2] if V["crosshatch"] else [])
-            for k in fams:
-                u = (ex + k * ey) / math.sqrt(1.0 + k * k)
-                for c in V["burns"]:
-                    w = V["burn_w"] * (1.0 - 0.45 * sat(np.abs(ey) / 2.0))
-                    burn = np.maximum(burn, self.cov(np.abs(u - c) - w))
-                    halo = np.maximum(halo, np.exp(-((u - c) / (V["burn_w"] * 2.1)) ** 2))
-            if not V["flat"]:
-                face = mix(face, C["dark"], halo * on_face * 0.55)
-            if V["ember"]:
-                # glowing orange embers around the char lines
-                glow = np.clip(halo - burn, 0, 1) * on_face * V["ember"]
-                face = np.clip(face + rgb(255, 110, 30) * (glow * 0.85)[..., None], 0, 1)
-            face = mix(face, rgb(14, 8, 5), burn * on_face)
-            if V["notch"]:
-                # the bite shows the juicy pink inside, with a thin crust ring
-                nx, ny, nr = V["notch"]
-                nd = np.hypot(ex - nx, ey - ny) - nr
-                cut = smoothstep(0.95, 0.75, nd) * smoothstep(-0.05, -0.35, top)
-                meat = mix(rgb(232, 128, 120), rgb(196, 70, 70), smoothstep(0.1, 0.75, nd))
-                meat = mix(rgb(120, 60, 36), meat, smoothstep(0.08, 0.2, nd))
-                face = mix(face, meat, cut)
-            if V["glaze"]:
-                # glossy BBQ glaze: several wet highlights along the steak
-                for (hx, hy, hrx, hry, a) in ((-2.0, -1.0, 0.9, 0.2, 0.9), (0.6, -1.35, 1.2, 0.17, 0.7),
-                                               (2.5, -0.7, 0.5, 0.14, 0.6), (-0.6, 0.9, 0.6, 0.12, 0.35)):
-                    gl = sd_ellipse(ex, ey, hx, hy, hrx, hry, 0.0)
-                    face = mix(face, rgb(255, 230, 214), sat(-gl / 0.12) * a * V["glaze"])
-            elif V["gloss"]:
-                gl = sd_ellipse(X, Y, V["cx"] - 1.9, V["cy"] - 0.2, 0.85, 0.24, V["angle"])
-                if V["flat"]:
-                    face = mix(face, WHITE, self.cov(gl) * V["gloss"])
-                else:
-                    face = mix(face, rgb(255, 236, 222), sat(-gl / 0.3) * V["gloss"])
-            # dark bottom-right rim (the thickness of the steak)
+            edge = smoothstep(-0.95, -0.3, top)
+            face = mix(face, C["rim"], edge * smoothstep(0.2, 0.7, facing) * 0.75)
+            face = mix(face, C["side"], edge * smoothstep(0.2, 0.7, -facing) * 0.5)
             sidec = mix(C["side"], C["side2"], sat((X - 1.0) / 7.0))
             col = np.where((top < 0)[..., None], face, sidec)
-            col = mix(col, C["side2"] * 0.8, self.cov(np.abs(top) - 0.08) * (side < 0))
-            if bone is not None:
-                is_bone = (bone < 0) & (top >= 0) & (side >= 0)
-                bcol = mix(rgb(240, 230, 210), rgb(190, 176, 152), sat((ey + 0.3) / 0.9))
-                col = np.where(is_bone[..., None], bcol, col)
+            col = mix(col, C["side2"] * 0.7, self.cov(np.abs(top) - 0.08) * (side < 0))
             outline = C["outline"]
             if hunger:
                 col = mix(col, rgb(100, 150, 46), 0.5)
@@ -543,8 +590,6 @@ class Renderer:
                 col = mix(col, WHITE, 0.4)
                 outline = rgb(250, 240, 232)
             col = mix(outline, col, inner)
-        if sticker:
-            col = mix(rgb(250, 246, 238), col, self.cov(body))
         if kind == "half":
             # the food bar fills right-to-left, so the half icon keeps the right side
             alpha = alpha * self.cov(4.5 - X)
