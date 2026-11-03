@@ -3,12 +3,12 @@
 Galaxy GUI - resource pack generator for Minecraft 1.8.9.
 
 Everything in the pack is drawn procedurally by this script (original art):
-  * animated galaxy hearts: pixel-art heart shapes filled with a drifting,
-    twinkling purple starfield/nebula
-  * pixel-art steak hunger bar (replaces the drumsticks)
+  * animated galaxy hearts: smooth hearts filled with a drifting, twinkling
+    purple starfield/nebula
+  * cartoon steak hunger bar (replaces the drumsticks)
   * animated galaxy XP bar: same starfield style, shifted to blue/cyan, flowing
     along the bar
-  * matching galaxy armor, plus air bubbles, boss/jump bars, ping icons, crosshair
+  * matching galaxy armor, plus smooth air bubbles, boss/jump bars, ping icons, crosshair
 
 The animation uses OptiFine "custom animations" (assets/minecraft/mcpatcher/anim),
 because vanilla 1.8.9 cannot animate GUI textures. Without OptiFine the hearts and
@@ -114,65 +114,73 @@ def fbm(k, u, v):
 
 
 # --------------------------------------------------------------------------- #
-# Pixel-art shapes (9x9, like the vanilla HUD icons). o = outline, f = fill
+# Signed distance functions (units = vanilla 16x pixels, "base px").
+# Shapes are smooth vectors rendered at full resolution with anti-aliasing.
 # --------------------------------------------------------------------------- #
-HEART_PIX = [
-    ".ooo.ooo.",
-    "offfofffo",
-    "offfffffo",
-    "offfffffo",
-    ".offfffo.",
-    "..offfo..",
-    "...ofo...",
-    "....o....",
-    ".........",
-]
-HEART_SHINE = [(1, 1)]   # (x, y) pixels that get a soft highlight
-
-ARMOR_PIX = [
-    "ooo...ooo",
-    "offoooffo",
-    "offfffffo",
-    "oofffffoo",
-    ".offfffo.",
-    ".offfffo.",
-    ".offfffo.",
-    ".ooooooo.",
-    ".........",
-]
-
-BUBBLE_PIX = [
-    ".........",
-    "...ooo...",
-    "..offfo..",
-    ".offfffo.",
-    ".offfffo.",
-    ".offfffo.",
-    "..offfo..",
-    "...ooo...",
-    ".........",
-]
-BUBBLE_POP_PIX = [
-    ".........",
-    ".o.....o.",
-    "..o...o..",
-    ".........",
-    ".........",
-    ".........",
-    "..o...o..",
-    ".o.....o.",
-    ".........",
-]
+def smin(a, b, k):
+    h = sat(0.5 + 0.5 * (b - a) / k)
+    return b * (1.0 - h) + a * h - k * h * (1.0 - h)
 
 
-def pix_masks(rows):
-    a = np.array([list(r) for r in rows])
-    return (a == "o").astype(np.float32), (a == "f").astype(np.float32)
+def sd_heart_unit(px, py):
+    # Exact heart SDF (Inigo Quilez). Point (0,0) is the bottom tip, y up.
+    px = np.abs(px)
+    d1 = np.hypot(px - 0.25, py - 0.75) - math.sqrt(2.0) / 4.0
+    t = 0.5 * np.maximum(px + py, 0.0)
+    d2 = np.sqrt(np.minimum(px * px + (py - 1.0) ** 2,
+                            (px - t) ** 2 + (py - t) ** 2)) * np.sign(px - py)
+    return np.where(py + px > 1.0, d1, d2)
 
 
-def upscale(grid, k):
-    """Nearest-neighbour upscale of a small grid (keeps the crisp pixel look)."""
-    return np.repeat(np.repeat(grid, k, axis=0), k, axis=1)
+HEART_K = 7.0
+
+
+def sd_heart(X, Y):
+    return sd_heart_unit((X - 4.5) / HEART_K, (8.35 - Y) / HEART_K) * HEART_K
+
+
+def sd_ellipse(X, Y, cx, cy, rx, ry, ang):
+    dx, dy = X - cx, Y - cy
+    c, s = math.cos(ang), math.sin(ang)
+    ex = dx * c + dy * s
+    ey = -dx * s + dy * c
+    k = np.hypot(ex / rx, ey / ry)
+    g = np.hypot(ex / (rx * rx), ey / (ry * ry))
+    return (k - 1.0) * k / np.maximum(g, 1e-6)
+
+
+def sd_circle(X, Y, cx, cy, r):
+    return np.hypot(X - cx, Y - cy) - r
+
+
+def sd_box(X, Y, cx, cy, hx, hy, r=0.0):
+    qx = np.abs(X - cx) - hx + r
+    qy = np.abs(Y - cy) - hy + r
+    return (np.hypot(np.maximum(qx, 0), np.maximum(qy, 0))
+            + np.minimum(np.maximum(qx, qy), 0) - r)
+
+
+def sd_polygon(X, Y, pts):
+    pts = np.asarray(pts, dtype=np.float32)
+    d = (X - pts[0, 0]) ** 2 + (Y - pts[0, 1]) ** 2
+    s = np.ones_like(X)
+    j = len(pts) - 1
+    for i in range(len(pts)):
+        ex, ey = pts[j] - pts[i]
+        wx, wy = X - pts[i, 0], Y - pts[i, 1]
+        t = np.clip((wx * ex + wy * ey) / (ex * ex + ey * ey), 0, 1)
+        bx, by = wx - ex * t, wy - ey * t
+        d = np.minimum(d, bx * bx + by * by)
+        c1 = Y >= pts[i, 1]
+        c2 = Y < pts[j, 1]
+        c3 = ex * wy > ey * wx
+        s = np.where((c1 & c2 & c3) | (~c1 & ~c2 & ~c3), -s, s)
+        j = i
+    return s * np.sqrt(d)
+
+
+ARMOR_PTS = [(1.1, 1.3), (3.2, 0.8), (4.5, 2.1), (5.8, 0.8), (7.9, 1.3), (8.5, 4.1),
+             (6.9, 4.4), (6.9, 8.3), (2.1, 8.3), (2.1, 4.4), (0.5, 4.1)]
 
 
 # --------------------------------------------------------------------------- #
@@ -296,186 +304,178 @@ class Renderer:
         self.add_stars(col, X, Y, stars, t, P["star"], period=(perx, pery), shift=(ox, oy))
         return col
 
-    def pixel_icon(self, rows, fill_col, outline_col, half=None, sub=1):
-        """Compose a pixel-art silhouette: fill_col/outline_col are (h,w,3) or (3,)."""
-        o, f = pix_masks(rows)
-        k = self.S // sub
-        o = upscale(o, k)
-        f = upscale(f, k)
-        if half == "left":
-            o[:, o.shape[1] // 2 + k // 2:] = 0
-            f[:, f.shape[1] // 2 + k // 2:] = 0
-        col = mix(np.broadcast_to(outline_col, o.shape + (3,)), fill_col, f)
-        return to_rgba(col, np.maximum(o, f))
+    # ---------------- shared smooth "galaxy" look ----------------
+    def galaxy_fill(self, X, Y, d, t, P, seed=0, flash=False, ow=0.5, gloss=None, **sf):
+        """Starfield inside a smooth shape with a thin outline, a soft inner shadow
+        for depth and a faint nebula-coloured rim light."""
+        g = self.starfield(X, Y, t, P, seed=seed, **sf)
+        inner = np.maximum(-d - ow, 0.0)
+        g = g * (0.7 + 0.3 * smoothstep(0.0, 1.5, inner))[..., None]
+        g = g + P["cloud"] * (np.exp(-inner / 0.3) * 0.32)[..., None]
+        if gloss is not None:
+            g = mix(g, WHITE, gloss)
+        outline = P["outline"]
+        if flash:
+            g = mix(g, WHITE, 0.4)
+            outline = rgb(250, 244, 255)
+        return mix(outline, g, self.cov(d + ow))
 
     # ---------------- hearts ----------------
     def heart(self, t, P, kind="full", flash=False, seed=0):
         X, Y = self.grid(9, 9)
+        d = sd_heart(X, Y)
+        alpha = self.cov(d)
         if kind == "container":
             # an empty heart: very dim, static galaxy behind a dark outline
             g = self.starfield(X, Y, 0.0, P, seed=seed) * 0.22 + rgb(10, 6, 18)
             outline = rgb(250, 244, 255) if flash else rgb(4, 2, 8)
-            return self.pixel_icon(HEART_PIX, g, outline)
-        g = self.starfield(X, Y, t, P, seed=seed)
-        # soft shine on the upper-left lobe (like vanilla's highlight pixel)
-        shine = np.zeros((9, 9), np.float32)
-        for (x, y) in HEART_SHINE:
-            shine[y, x] = 1.0
-        g = mix(g, WHITE, upscale(shine, self.S) * 0.16)
-        outline = P["outline"]
-        if flash:
-            g = mix(g, WHITE, 0.42)
-            outline = rgb(250, 244, 255)
-        return self.pixel_icon(HEART_PIX, g, outline,
-                               half="left" if kind == "half" else None)
+            return to_rgba(mix(outline, g, self.cov(d + 0.5)), alpha)
+        gl = sd_ellipse(X, Y, 2.6, 2.75, 0.9, 0.42, -0.7)
+        col = self.galaxy_fill(X, Y, d, t, P, seed, flash, ow=0.5,
+                               gloss=sat(-gl / 0.5) * 0.28)
+        if kind == "half":
+            alpha = alpha * self.cov(X - 4.5)
+        return to_rgba(col, alpha)
 
     # ---------------- steak (hunger) ----------------
-    @staticmethod
-    def steak_grid():
-        """Original 18x18 pixel-art cooked steak (drawn at 2x the HUD pixel grid).
-        Returns an (18, 18, 4) float array in 0..1."""
-        n = 18
-        yy, xx = np.mgrid[0:n, 0:n] + 0.5
-        a = -0.5                                  # long axis rises to the right
-        dx, dy = xx - 9.0, yy - 9.4
+    def steak_slab(self, X, Y, drop=0.0):
+        """Rounded, slightly lumpy slab (superellipse) tilted up to the right."""
+        cx, cy, rx, ry, a, p = 4.5, 4.05 + drop, 3.85, 2.4, -0.42, 2.6
+        dx, dy = X - cx, Y - cy
         ex = dx * math.cos(a) + dy * math.sin(a)
         ey = -dx * math.sin(a) + dy * math.cos(a)
-        lump = 0.35 * np.sin(ex * 0.9 + 1.0)      # slightly irregular top edge
-        inside = (ex / 8.5) ** 2 + ((ey + np.where(ey < 0, lump, 0)) / 5.1) ** 2 <= 1.0
-
-        def nb(mask, dx_, dy_):
-            out = np.zeros_like(mask)
-            src = mask[max(0, dy_):n + min(0, dy_), max(0, dx_):n + min(0, dx_)]
-            out[max(0, -dy_):n + min(0, -dy_), max(0, -dx_):n + min(0, -dx_)] = src
-            return out
-
-        down, right = nb(inside, 0, 1), nb(inside, 1, 0)
-        up, left = nb(inside, 0, -1), nb(inside, -1, 0)
-        edge = inside & ~(down & right & up & left)
-        edge_br = edge & (~down | ~right)
-        ring = inside & ~edge
-        ring2 = ring & ~(nb(ring, 0, 1) & nb(ring, 1, 0))    # inner bottom-right band
-        ring_tl = ring & ~(nb(ring, 0, -1) & nb(ring, -1, 0))  # inner top-left band
-
-        col = np.zeros((n, n, 3), np.float32)
-        col[inside] = rgb(150, 86, 60)
-        # chunky speckle pattern, deterministic
-        rng = np.random.default_rng(7)
-        speck = (rng.random((n, n)) < 0.32) & ring
-        speck |= (((xx.astype(int) * 3 + yy.astype(int) * 5) % 7) == 0) & ring
-        col[speck] = rgb(122, 66, 46)
-        lite = (rng.random((n, n)) < 0.12) & ring & ~speck
-        col[lite] = rgb(172, 104, 74)
-        col[ring_tl & ~speck] = rgb(176, 110, 80)
-        col[ring2] = rgb(110, 58, 40)
-        col[edge] = rgb(104, 56, 38)
-        col[edge_br] = rgb(74, 36, 24)
-        alpha = inside.astype(np.float32)
-        return np.concatenate([col, alpha[..., None]], axis=-1), inside, edge
+        ry_ = ry + np.where(ey < 0, 0.2 * np.sin(ex * 1.3 + 0.6), 0.0)
+        f = (np.abs(ex / rx) ** p + np.abs(ey / ry_) ** p) ** (1.0 / p) - 1.0
+        gy, gx = np.gradient(f, 1.0 / self.S)
+        return f / np.maximum(np.hypot(gx, gy), 1e-4)
 
     def steak(self, kind="full", flash=False, hunger=False):
-        g, inside, edge = self.steak_grid()
-        col = g[..., :3].copy()
-        alpha = g[..., 3].copy()
+        """Cartoon cooked steak: bold outline, cel shading, darker seared blotches,
+        and a visible thick side so it reads as a slab of meat."""
+        X, Y = self.grid(9, 9)
+        top = self.steak_slab(X, Y)
+        side = self.steak_slab(X, Y, drop=0.8)
+        body = np.minimum(top, side)
+        alpha = self.cov(body)
+        ow = 0.45
+        inner = self.cov(body + ow)
         if kind == "container":
-            col[inside] = rgb(40, 26, 20)
-            col[edge] = rgb(250, 240, 232) if flash else rgb(14, 7, 4)
-            if hunger:
-                col[inside & ~edge] = rgb(26, 34, 14)
+            fill = rgb(26, 34, 14) if hunger else rgb(40, 26, 20)
+            outline = rgb(250, 240, 232) if flash else rgb(14, 7, 4)
+            col = mix(outline, np.broadcast_to(fill, X.shape + (3,)), inner)
+            col = mix(col, rgb(28, 18, 13), self.cov(np.abs(top) - 0.1) * (side < 0) * inner)
         else:
+            # top face
+            n = fbm(2, X * 8.0 + 20.0, Y * 8.0 + 60.0)
+            face = mix(rgb(150, 74, 48), rgb(136, 64, 40), sat(0.5 + 0.4 * n))
+            face = mix(face, rgb(108, 48, 30), smoothstep(0.3, 0.5, n) * 0.85)  # seared patches
+            face = mix(face, rgb(170, 94, 64), smoothstep(-0.55, -0.8, n) * 0.8)  # juicy spots
+            dots = samp(NOISE[5], X * 22.0, Y * 22.0)
+            face = mix(face, rgb(96, 42, 26), smoothstep(1.2, 1.4, dots))       # speckles
+            # cel shading from the top face's edge normal (light from the top-left)
+            gy, gx = np.gradient(top, 1.0 / self.S)
+            facing = -(gx + gy) / math.sqrt(2.0)
+            edge = smoothstep(-1.1, -0.35, top)
+            face = mix(face, rgb(190, 116, 84), edge * smoothstep(0.2, 0.7, facing) * 0.85)
+            face = mix(face, rgb(98, 44, 28), edge * smoothstep(0.2, 0.7, -facing) * 0.7)
+            gl = sd_ellipse(X, Y, 3.0, 3.0, 1.05, 0.32, -0.42)
+            face = mix(face, rgb(255, 236, 222), sat(-gl / 0.35) * 0.55)
+            # side of the slab
+            sidec = mix(rgb(100, 44, 28), rgb(70, 30, 18), sat((X - 1.0) / 7.0))
+            col = np.where((top < 0)[..., None], face, sidec)
+            # line where the top face meets the side
+            col = mix(col, rgb(64, 30, 16), self.cov(np.abs(top) - 0.09) * (side < 0))
+            outline = rgb(52, 22, 12)
             if hunger:
                 col = mix(col, rgb(100, 150, 46), 0.5)
+                outline = rgb(20, 34, 8)
             if flash:
                 col = mix(col, WHITE, 0.4)
-                col[edge] = rgb(250, 240, 232)
+                outline = rgb(250, 240, 232)
+            col = mix(outline, col, inner)
         if kind == "half":
             # the food bar fills right-to-left, so the half icon keeps the right side
-            alpha[:, :9] = 0
-        k = self.S // 2
-        return to_rgba(upscale(col, k), upscale(alpha, k))
+            alpha = alpha * self.cov(4.5 - X)
+        return to_rgba(col, alpha)
 
     # ---------------- armor ----------------
     def armor(self, kind="full"):
         X, Y = self.grid(9, 9)
+        d = sd_polygon(X, Y, ARMOR_PTS) - 0.15
+        alpha = self.cov(d)
         if kind == "empty":
-            g = np.broadcast_to(rgb(24, 20, 40), X.shape + (3,))
-            return self.pixel_icon(ARMOR_PIX, g, rgb(4, 2, 10))
-        g = self.starfield(X, Y, 0.0, PAL_ARMOR, seed=1)
-        return self.pixel_icon(ARMOR_PIX, g, PAL_ARMOR["outline"],
-                               half="left" if kind == "half" else None)
+            col = mix(rgb(6, 4, 14), rgb(26, 20, 42), self.cov(d + 0.5))
+            return to_rgba(col, alpha)
+        col = self.galaxy_fill(X, Y, d, 0.0, PAL_ARMOR, seed=1, ow=0.5)
+        if kind == "half":
+            alpha = alpha * self.cov(X - 4.5)
+        return to_rgba(col, alpha)
 
     # ---------------- air bubbles ----------------
     def bubble(self, popping=False):
         X, Y = self.grid(9, 9)
+        r = 3.6 if popping else 3.3
+        d = sd_circle(X, Y, 4.5, 4.5, r)
+        ring = self.cov(np.abs(d) - 0.4)
+        inside = self.cov(d)
         if popping:
-            return self.pixel_icon(BUBBLE_POP_PIX, rgb(0, 0, 0), rgb(200, 236, 255))
-        g = mix(rgb(70, 150, 230), rgb(150, 210, 255), sat((9 - X - Y) / 9.0))
-        icon = self.pixel_icon(BUBBLE_PIX, g, rgb(220, 244, 255))
-        k = self.S
-        icon[3 * k:4 * k, 3 * k:4 * k, :3] = 255      # highlight pixel
-        return icon
+            ang = np.arctan2(Y - 4.5, X - 4.5)
+            ring = ring * smoothstep(-0.2, 0.25, np.cos(ang * 4.0 + 0.5))
+            inside = inside * 0.0
+        col = np.broadcast_to(rgb(120, 200, 255), X.shape + (3,)).copy()
+        col = mix(col, rgb(214, 244, 255), ring)
+        h = sat(-sd_ellipse(X, Y, 3.2, 3.1, 0.8, 0.45, -0.7) / 0.3) * (0 if popping else 1)
+        col = mix(col, WHITE, h)
+        return to_rgba(col, np.maximum(np.maximum(ring, inside * 0.35), h * 0.9))
 
     # ---------------- bars (xp / boss / horse jump) ----------------
-    def bar_shape(self, w=182, h=5):
-        o = np.zeros((h, w), np.float32)
-        o[0, :] = o[-1, :] = 1
-        o[:, 0] = o[:, -1] = 1
-        f = np.zeros((h, w), np.float32)
-        f[1:-1, 1:-1] = 1
-        for (y, x) in ((0, 0), (0, w - 1), (h - 1, 0), (h - 1, w - 1)):
-            o[y, x] = 0               # cut corners for a rounded pixel look
-        return upscale(o, self.S), upscale(f, self.S)
-
     def bar(self, t, P, kind="fill", seed=5, flow=True):
         X, Y = self.grid(182, 5)
-        o, f = self.bar_shape()
+        d = sd_box(X, Y, 91.0, 2.5, 91.0, 2.5, 1.6)
+        alpha = self.cov(d)
         if kind == "bg":
             g = self.starfield(X, Y, 0.0, P, seed=seed + 3, scale=(4.0, 12.0)) * 0.2
             g = g + rgb(8, 8, 20)
-            col = mix(np.broadcast_to(rgb(2, 2, 8), X.shape + (3,)), g, f)
-            return to_rgba(col, np.maximum(o, f))
+            g = g * (1.0 - 0.35 * sat((2.6 - Y) / 2.0))[..., None]   # inset shadow
+            return to_rgba(mix(rgb(2, 2, 8), g, self.cov(d + 0.45)), alpha)
         # wide, horizontally stretched clouds that flow along the bar;
-        # period 256/2.8 = 91 base px drifts once per loop
-        g = self.starfield(X, Y, t, P, seed=seed, scale=(2.8125, 12.0),
-                           drift=(1 if flow else 0, 0), star_density=0.05,
-                           big_density=0.004)
-        # pixel-style shine on the top row of the fill
-        shine = np.zeros((5, 182), np.float32)
-        shine[1, 1:-1] = 1
-        g = mix(g, WHITE, upscale(shine, self.S) * 0.07)
-        col = mix(np.broadcast_to(P["outline"], X.shape + (3,)), g, f)
-        return to_rgba(col, np.maximum(o, f))
+        # period 256/2.8125 = 91 base px drifts once per loop
+        gloss = 0.06 * np.exp(-((Y - 1.25) / 0.4) ** 2)
+        col = self.galaxy_fill(X, Y, d, t, P, seed=seed, ow=0.45, gloss=gloss,
+                               scale=(2.8125, 12.0), drift=(1 if flow else 0, 0),
+                               star_density=0.05, big_density=0.004)
+        return to_rgba(col, alpha)
 
     # ---------------- misc ----------------
     def crosshair(self):
-        c = np.zeros((16, 16), np.float32)
-        c[7, 3:12] = 1
-        c[3:12, 7] = 1
-        return to_rgba(np.broadcast_to(WHITE, (16 * self.S, 16 * self.S, 3)),
-                       upscale(c, self.S))
+        X, Y = self.grid(16, 16)
+        d = np.minimum(sd_box(X, Y, 7.5, 7.5, 0.5, 4.5), sd_box(X, Y, 7.5, 7.5, 4.5, 0.5))
+        return to_rgba(np.broadcast_to(WHITE, X.shape + (3,)), self.cov(d))
 
     def ping(self, level):
         """level 0 = 5 bars ... 4 = 1 bar, 5 = no connection."""
-        g = np.zeros((8, 10, 3), np.float32)
-        a = np.zeros((8, 10), np.float32)
+        X, Y = self.grid(10, 8)
+        col = np.zeros(X.shape + (3,), np.float32)
+        a = np.zeros(X.shape, np.float32)
         active = 5 - level if level < 5 else 0
         for i in range(5):
-            h = 2 + i
-            x = i * 2
+            h = 2.0 + i * 1.5
+            m = self.cov(sd_box(X, Y, 0.9 + i * 2.0, 8.0 - h / 2.0, 0.75, h / 2.0, 0.25))
             if level == 5:
-                c = rgb(120, 30, 50)
+                c = rgb(150, 30, 50)
             elif i < active:
                 c = mix(rgb(70, 230, 220), rgb(170, 120, 255), i / 4.0)
             else:
                 c = rgb(46, 40, 66)
-            g[8 - h:8, x] = c
-            a[8 - h:8, x] = 1
+            col = mix(col, c, m)
+            a = np.maximum(a, m)
         if level == 5:
-            for i in range(5):
-                for (x, y) in ((3 + i, 1 + i), (7 - i, 1 + i)):
-                    g[y, x] = rgb(255, 80, 100)
-                    a[y, x] = 1
-        return to_rgba(upscale(g, self.S), upscale(a, self.S))
+            d = np.minimum(np.abs((X - 5) - (Y - 4)), np.abs((X - 5) + (Y - 4))) - 0.5
+            d = np.maximum(d, np.maximum(np.abs(X - 5), np.abs(Y - 4)) - 2.6)
+            m = self.cov(d)
+            col = mix(col, rgb(255, 80, 100), m)
+            a = np.maximum(a, m)
+        return to_rgba(col, a)
 
 
 def to_rgba(col, alpha):
@@ -589,7 +589,6 @@ def pack_icon():
     R = Renderer(28)
     heart = R.heart(0.0, PAL_HEART, "full")
     img = np.zeros((256, 256, 4), np.uint8)
-    heart = heart[:8 * 28]                     # the bottom pixel row is empty
     oy = (256 - heart.shape[0]) // 2
     ox = (256 - heart.shape[1]) // 2
     img[oy:oy + heart.shape[0], ox:ox + heart.shape[1]] = heart
@@ -698,7 +697,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--res", type=int, nargs="*", default=[256, 512],
-                    help="pack resolutions to build (multiples of 32)")
+                    help="pack resolutions to build (multiples of 16)")
     ap.add_argument("--out", default="dist")
     ap.add_argument("--preview", action="store_true")
     a = ap.parse_args()
