@@ -89,6 +89,9 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .tabs button { appearance: none; border: 1px solid var(--line); background: var(--panel); color: var(--fg); border-radius: 999px; padding: 8px 16px; font: inherit; font-weight: 700; cursor: pointer; }
 .tabs button[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 select { background: var(--panel-2); color: var(--fg); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font: inherit; width: 100%; }
+.vary-grid { grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); }
+.vary-grid .design canvas { width: 96px; height: 96px; }
+.vary-grid .design span { font-size: 12px; text-align: center; }
 .toggle { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; cursor: pointer; }
 .toggle input { width: 18px; height: 18px; accent-color: var(--meat); }
 .colors { display: flex; flex-wrap: wrap; gap: 12px; }
@@ -1469,6 +1472,8 @@ function elSections(key, kind, name, cls) {
 }
 
 const SECTIONS = [
+  { id: "steak-vary", tab: "steak", title: "Steak: pick a small variation", cls: "meat", vary: true,
+    hint: "Each one changes your current steak in one small way. Click one to use it. Make variations again to tweak from there.", groups: [] },
   { id: "steak-design", tab: "steak", title: "Steak: start from a design", cls: "meat", chips: "designs",
     hint: "A design sets the texture, border and shape together. Change any part of it in the cards below.", groups: [] },
   { id: "steak-texture", tab: "steak", title: "Steak texture", cls: "meat", chips: [["texturesReal", "Realistic"], ["textures", "Cartoon"]], groups: [
@@ -1657,6 +1662,14 @@ for (const sec of SECTIONS) {
   const dot = document.createElement("span"); dot.className = "dot" + (sec.cls ? " " + sec.cls : ""); h.append(dot, sec.title); card.appendChild(h);
   if (sec.hint) { const p = document.createElement("p"); p.className = "hint"; p.textContent = sec.hint; card.appendChild(p); }
   if (sec.editor) card.appendChild(makeEditor(sec.editor));
+  if (sec.vary) {
+    const row = document.createElement("div"); row.className = "export-row";
+    row.innerHTML = `<button type="button" class="btn" id="vary-make">Make variations of my steak</button>
+      <button type="button" class="btn" id="vary-back" disabled>Go back to my steak</button>`;
+    const grid = document.createElement("div"); grid.className = "designs vary-grid"; grid.id = "vary-grid";
+    grid.setAttribute("role", "group"); grid.setAttribute("aria-label", "Steak variations");
+    card.append(row, grid);
+  }
   if (sec.chips) {
     const sets = Array.isArray(sec.chips) ? sec.chips : [[sec.chips, null]];
     for (const [set, label] of sets) {
@@ -1759,6 +1772,45 @@ function drawThumbs() {
     else g.drawImage(img, 2, 2);
   }
 }
+/* ---------- small variations of the current steak ---------- */
+const shadesFrom = meat => { const m = unhex(meat); return { dark: hex(scale3(m, 0.59)), rim: hex(scale3(m, 1.48)), side: hex(scale3(m, 0.57)) }; };
+const tintMeat = (col, f) => { const m = unhex(col.meat); col.meat = hex(f(m)); if (col.linked) Object.assign(col, shadesFrom(col.meat)); };
+const VARIATIONS = [
+  ["A touch darker", (sh, col) => tintMeat(col, m => scale3(m, 0.88))],
+  ["A touch lighter", (sh, col) => tintMeat(col, m => scale3(m, 1.12))],
+  ["A little redder", (sh, col) => tintMeat(col, m => [m[0] * 1.12, m[1] * 0.92, m[2] * 0.95])],
+  ["Warmer brown", (sh, col) => tintMeat(col, m => [m[0] * 1.06, m[1] * 1.08, m[2] * 0.9])],
+  ["Thicker burn lines", sh => { sh.burnW *= 1.25; }],
+  ["Thinner burn lines", sh => { sh.burnW *= 0.78; }],
+  ["Burn lines tilted", sh => { sh.burnAng += 0.14; }],
+  ["Burn lines spread out", sh => { sh.burnSpacing *= 1.15; }],
+  ["More scorch by the lines", sh => { sh.burnHalo += 0.45; }],
+  ["Leans a bit more", sh => { if (sh.custom) sh.rotate = (sh.rotate || 0) + 0.07; else sh.angle -= 0.07; }],
+  ["Thinner outline", sh => { sh.outline *= 0.78; }],
+  ["Bolder outline", sh => { sh.outline = Math.min(1, sh.outline * 1.22); }],
+  ["Thicker cut", sh => { sh.thick += 0.15; }],
+  ["A little shinier", sh => { sh.edgeHi = (sh.edgeHi ?? 0.6) + 0.35; sh.shine += 0.15; }],
+  ["Rougher edge", sh => { sh.rough = [(sh.rough[0] || 0) + 0.035, sh.rough[1] || 4]; }],
+];
+let varyBase = null, varyPicked = -1;
+function makeVariations() {
+  varyBase = { shape: clone(st.shape), steakCol: clone(st.steakCol), design: st.design }; varyPicked = -1;
+  const grid = $("vary-grid"); grid.textContent = "";
+  VARIATIONS.forEach(([label, fn], i) => {
+    const sh = clone(varyBase.shape), col = clone(varyBase.steakCol); fn(sh, col);
+    const b = document.createElement("button"); b.type = "button"; b.className = "design"; b.setAttribute("aria-pressed", "false");
+    const c = document.createElement("canvas"); c.width = 148; c.height = 148;
+    const s = document.createElement("span"); s.textContent = (i + 1) + ". " + label; b.append(c, s);
+    c.getContext("2d").drawImage(toCanvas(steakIcon(16, Object.assign({}, st, { steakCol: col }), "full", false, false, sh)), 2, 2);
+    b.addEventListener("click", () => {
+      st.shape = clone(sh); st.steakCol = clone(col); varyPicked = i;
+      for (const x of grid.children) x.setAttribute("aria-pressed", String(x === b));
+      $("vary-back").disabled = false; syncInputs(); changed();
+    });
+    grid.appendChild(b);
+  });
+  $("vary-back").disabled = true;
+}
 function syncInputs() {
   for (const ctl of allControls) {
     const v = getP(ctl.path), inp = $(idOf(ctl.path));
@@ -1770,10 +1822,20 @@ function syncInputs() {
   for (const [set, cfg] of Object.entries(chipSets)) for (const b of $("chips-" + set).children) b.setAttribute("aria-pressed", String(b.dataset.name === cfg.sel()));
   $("r256").setAttribute("aria-pressed", String(st.res === 256)); $("r512").setAttribute("aria-pressed", String(st.res === 512));
 }
+function wireVariations() {
+  $("vary-make").addEventListener("click", makeVariations);
+  $("vary-back").addEventListener("click", () => {
+    if (!varyBase) return;
+    st.shape = clone(varyBase.shape); st.steakCol = clone(varyBase.steakCol); st.design = varyBase.design; varyPicked = -1;
+    for (const x of $("vary-grid").children) x.setAttribute("aria-pressed", "false");
+    $("vary-back").disabled = true; syncInputs(); changed();
+  });
+}
 function showTab() {
   for (const b of tabBar.children) b.setAttribute("aria-selected", String(b.id === "tab-" + st.tab));
   for (const card of controlsEl.querySelectorAll(".card[data-tab]")) card.hidden = card.dataset.tab !== st.tab;
   drawThumbs(); if (EDIT[st.tab]) syncEditor(st.tab);
+  if (st.tab === "steak" && !varyBase) makeVariations();
 }
 
 /* =====================================================================
@@ -1941,6 +2003,7 @@ $("build").addEventListener("click", async () => {
 
 syncInputs();
 for (const key of Object.keys(EDIT)) wireEditor(key);
+wireVariations();
 showTab();
 setTimeout(() => { buildPreview(); drawThumbs(); }, 0);
 </script>
