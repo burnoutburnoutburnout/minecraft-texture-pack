@@ -50,12 +50,12 @@ Colours live in the `PAL_*` palettes near the top of the script. Animation speed
 ### Steak designs
 
 There are 20 steak designs to choose from (see [`previews/steak-variants.png`](previews/steak-variants.png)).
-They all share the same dark cartoon steak (Minecraft steak shape and angle, rough border)
-and differ in surface texture:
+Every one is a normal dark cartoon steak at the Minecraft steak's angle; each has its own
+meat texture and border style:
 
-`grill` (default), `crosshatch`, `speckle`, `mosaic`, `charred`, `embers`, `grain`,
-`pepper-crust`, `cel-bands`, `halftone`, `ink-hatch`, `glazed`, `bubbly`, `cracked`,
-`diamond`, `brushstroke`, `ash`, `seared-rings`, `herb-crust`, `marble-swirl`.
+`grill` (default), `crosshatch`, `wide-grill`, `thin-grill`, `speckle`, `chunky`, `grain`,
+`charred`, `char-edges`, `seared`, `bubbly`, `crust`, `caramelized`, `juicy`, `blotchy`,
+`well-done`, `plain`, `pan-lines`, `grill-char`, `cel-shaded`.
 
 ```bash
 python3 generator/build.py --steak cracked
