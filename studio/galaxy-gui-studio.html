@@ -313,17 +313,56 @@ function addStars(buf, S, W, H, stars, t, tint, period, shift) {
     }
   }
 }
+/* Random-looking but seamless motion. Only whole-number frequencies are used, so the motion at the
+   end of the loop meets the start exactly. randWarp varies the speed (between about 0.35x and 1.65x)
+   while still advancing one full step per loop; wander is a back-and-forth drift. */
+function randWarp(t, seed) {
+  const r = mulberry32(seed * 977 + 5); let w = t;
+  [0.34, 0.2, 0.1].forEach((a, i) => { const k = i + 1; w += a * Math.sin(TAU * k * t + r() * TAU) / (TAU * k); });
+  return w;
+}
+function wander(t, seed, amp) {
+  const r = mulberry32(seed * 613 + 9); let x = 0;
+  [1, 0.5, 0.28].forEach((a, i) => { x += a * Math.sin(TAU * (i + 1) * t + r() * TAU); });
+  return x * amp / 1.4;
+}
+function shootingStars(buf, S, W, H, t, n, seed, bar) {
+  const wB = W / S, hB = H / S;
+  for (let s = 0; s < n; s++) {
+    const r = mulberry32(seed * 31 + s * 7 + 3);
+    const ts = (s + r() * 0.8) / n, dur = 0.07 + 0.05 * r(), ph = ((t - ts) % 1 + 1) % 1;
+    // icons: start in the upper part and fly toward the middle, so the streak crosses the heart; bars: anywhere along the bar
+    const x0 = bar ? r() * wB : 1.6 + r() * (wB - 3.2), y0 = bar ? 0.8 + r() * (hB - 1.6) : 1.6 + r() * 1.8;
+    const side = bar ? (r() < 0.5 ? -1 : 1) : (x0 < wB / 2 ? 1 : -1), ang = bar ? 0.05 + r() * 0.08 : 0.5 + r() * 0.45;
+    if (ph >= dur) continue;
+    const q = ph / dur, fade = Math.sin(Math.PI * q), L = bar ? 40 : 4.6, tail = bar ? 9 : 2.2;
+    const dx = Math.cos(ang) * side, dy = Math.sin(ang);
+    const hx = x0 + dx * L * q, hy = y0 + dy * L * q, tx = hx - dx * tail, ty = hy - dy * tail;
+    const i0 = Math.max(0, Math.floor((Math.min(hx, tx) - 0.9) * S)), i1 = Math.min(W, Math.ceil((Math.max(hx, tx) + 0.9) * S));
+    const j0 = Math.max(0, Math.floor((Math.min(hy, ty) - 0.9) * S)), j1 = Math.min(H, Math.ceil((Math.max(hy, ty) + 0.9) * S));
+    for (let j = j0; j < j1; j++) for (let i = i0; i < i1; i++) {
+      const X = (i + 0.5) / S, Y = (j + 0.5) / S;
+      const along = sat(((X - tx) * dx + (Y - ty) * dy) / tail), px = tx + dx * tail * along, py = ty + dy * tail * along;
+      const d = Math.hypot(X - px, Y - py), dh = Math.hypot(X - hx, Y - hy);
+      const v = fade * (Math.exp(-((d / (bar ? 0.12 : 0.17)) ** 2)) * along ** 1.4 * 1.1 + Math.exp(-((dh / (bar ? 0.2 : 0.3)) ** 2)) * 1.6);
+      if (v <= 0.002) continue;
+      const p = (j * W + i) * 3; buf[p] += v; buf[p + 1] += v * 0.97; buf[p + 2] += v * 0.92;
+    }
+  }
+}
 function starfield(S, w, h, t, P, o = {}) {
   const seed = o.seed || 0, sx = (o.scale || [12, 12])[0], sy = (o.scale || [12, 12])[1];
   const drift = o.drift || [1, 1], dens = o.dens ?? 0.09, bigD = o.big ?? 0.012, starMul = o.starMul ?? P.starMul ?? 1, neb = o.neb ?? 1;
   const W = Math.round(w * S), H = Math.round(h * S), buf = new Float32Array(W * H * 3);
-  const perx = NN / sx, pery = NN / sy, ox = perx * drift[0] * t, oy = pery * drift[1] * t;
+  const perx = NN / sx, pery = NN / sy, rnd = !!o.wander, tw = rnd ? randWarp(t, seed) : t, bar = w > 40;
+  const ox = perx * drift[0] * tw + (rnd ? wander(t, seed, bar ? 6 : 1.5) : 0), oy = pery * drift[1] * tw + (rnd ? wander(t, seed + 3, bar ? 0.6 : 1.5) : 0);
+  const mc = Math.cos(TAU * t), ms = Math.sin(TAU * t);                     // nebula slowly changes shape (random mode)
   const t2 = T[(seed + 2) % 6], t4 = T[(seed + 4) % 6];
   for (let j = 0; j < H; j++) {
     const v = ((j + 0.5) / S - oy) * sy;
     for (let i = 0; i < W; i++) {
       const u = ((i + 0.5) / S - ox) * sx;
-      const n1 = fbm(seed, u, v), n2 = samp(t2, u + 90, v + 40), n3 = samp(t4, u + 30, v + 150);
+      const n1 = rnd ? fbm(seed, u, v) * mc + fbm(seed + 3, u + 50, v + 20) * ms : fbm(seed, u, v), n2 = samp(t2, u + 90, v + 40), n3 = samp(t4, u + 30, v + 150);
       const d = sstep(-1.5, 1.6, n1);
       let c = mixc(P.dark, P.deep, sstep(0.2, 0.6, d));
       c = mixc(c, mixc(P.cloud, P.cloud2, sat(0.5 + 0.5 * n2)), sstep(0.55, 0.9, d) * 0.9 * neb);
@@ -334,6 +373,7 @@ function starfield(S, w, h, t, P, o = {}) {
   }
   const nS = Math.floor(perx * pery * dens * starMul), nB = starMul > 0 ? Math.max(1, Math.floor(perx * pery * bigD * starMul)) : 0;
   addStars(buf, S, W, H, makeStars(seed + 101, nS, perx, pery, nB), t, P.star, [perx, pery], [ox, oy]);
+  if (o.shoot > 0) shootingStars(buf, S, W, H, t, o.shoot, seed + 41, bar);
   return buf;
 }
 
@@ -1201,7 +1241,7 @@ const EL_BORDER_KEYS = ["outline", "rough", "wave", "facets", "double", "thick",
   "bevel", "sticker", "feather", "drop", "waveType", "frame", "frameMat"];
 
 const EL_COMMON = {
-  design: "galaxy", texture: "galaxy", illus: "", frameLight: 0, animFps: "smooth", gemFill: "facets", facetStr: 0.6, stars: 1, texScale: 1, texStrength: 1, speed: 2, glow: 0.32,
+  design: "galaxy", texture: "galaxy", illus: "", frameLight: 0, animFps: "smooth", motion: "random", shoot: 2, gemFill: "facets", facetStr: 0.6, stars: 1, texScale: 1, texStrength: 1, speed: 2, glow: 0.32,
   border: "clean", outline: 0.5, rough: [0, 4], wave: [0, 0], facets: 0, double: false, thick: 0,
   outlineStyle: "solid", glowOut: 0, glowCol: "main", ring: 0, dash: 0, stitch: 0, bevel: 0, sticker: 0, feather: 0, drop: 0, waveType: "sine", frame: 0, frameMat: "stone",
   posX: 0, posY: 0, size: 1, tilt: 0, custom: false, points: [], smooth: 0.85,
@@ -1369,6 +1409,7 @@ function galaxyOpts(kind, el, tex, seed) {
   const o = kind === "bar" ? { scale: [2.8125 * k, 12 * k], drift: [el.flow === false ? 0 : 1, 0], dens: 0.05, big: 0.004 } : { scale: [12 * k, 12 * k], drift: [1, 1], dens: 0.09, big: 0.012 };
   if (tex === "nebula") o.starMul = 0;
   if (tex === "starfield") { o.neb = 0.25; o.dens *= 3; o.big *= 2; }
+  o.wander = el.motion === "random"; o.shoot = o.wander ? (el.shoot ?? 2) : 0;
   o.seed = seed; return o;
 }
 const gemCache = new WeakMap();
@@ -1501,7 +1542,7 @@ function elementIcon(kind, S, el, cols, t = 0, mode = "full", flash = false, see
   const ca = Math.cos(el.tilt), sa = Math.sin(el.tilt), lc = Math.cos(el.light * Math.PI / 180), ls = Math.sin(el.light * Math.PI / 180);
   const ow = el.outline, outCol = unhex(el.outlineCol), R = kind === "bar" ? 2.5 : 4, img = newImg(S, E.w, E.h);
   const emptyC = el.emptyCol ? unhex(el.emptyCol) : [0, 0, 0], bgC = el.bgCol ? unhex(el.bgCol) : [0, 0, 0];
-  const q = { kind, el, P, t: tt, seed, fv: null, X: 0, Y: 0, ex: 0, ey: 0 };
+  const q = { kind, el, P, t: el.motion === "random" ? randWarp(tt, seed + 17) : tt, seed, fv: null, X: 0, Y: 0, ex: 0, ey: 0 };
   const deco = mode !== "bg" && mode !== "empty";
   const glowC = el.glowCol === "white" ? WHITE : el.glowCol === "outline" ? outCol : P.bright;
   const stickerC = mixc(WHITE, P.bright, 0.1), dsx = Math.round(0.45 * S), dsy = Math.round(0.55 * S);
@@ -1662,7 +1703,7 @@ function gemHeartIcon(S, el, cols, t, mode, flash, seed) {
   // gem fill: the cut ruby facets, or any texture (galaxy, nebula, lava...) seen through the cut facets
   const texFill = el.gemFill === "texture", tex = el.texture, fs = el.facetStr ?? 0.6, tt0 = live ? t : 0;
   const field = texFill && GALAXY_TEX[tex] ? starfield(S, 9, 9, tt0, P, galaxyOpts("heart", el, tex, seed)) : null;
-  const q = { kind: "heart", el, P, t: tt0, seed, fv: null, X: 0, Y: 0, ex: 0, ey: 0 };
+  const q = { kind: "heart", el, P, t: el.motion === "random" ? randWarp(tt0, seed + 17) : tt0, seed, fv: null, X: 0, Y: 0, ex: 0, ey: 0 };
   for (let j = 0; j < W; j++) for (let i = 0; i < W; i++) {
     const X = (i + 0.5) / S, Y = (j + 0.5) / S, x = 4.5 + (X - ox) / sz, y = 4.49 + (Y - oy) / sz;
     const dO = sdPolygon(x, y, GH.outer) * sz;
@@ -1807,7 +1848,7 @@ const D = (path, label, min, max, step) => ({ type: "deg", path, label, min, max
 const TG = (path, label) => ({ type: "toggle", path, label });
 const AN = (path, label) => ({ type: "angle", path, label, min: 0, max: 360, step: 1 });
 const SEL = (path, label, options) => ({ type: "select", path, label, options });
-const INT_PATHS = /(burnCount|facets|segments|wave\.1|dash|stitch)$/;
+const INT_PATHS = /(burnCount|facets|segments|wave\.1|dash|stitch|shoot)$/;
 
 function elSections(key, kind, name, cls) {
   const p = s => key + "." + s;
@@ -1841,7 +1882,9 @@ function elSections(key, kind, name, cls) {
       R(p("facetStr"), "Facet shading on the texture", 0, 1, 0.01)] : []),
     R(p("stars"), "Stars", 0, 3, 0.05), R(p("texScale"), "Texture size", 0.3, 3, 0.01), R(p("texStrength"), "Texture strength", 0, 1, 0.01), R(p("glow"), "Edge glow", 0, 1, 0.01)];
   if (kind !== "armor") texCtl.push(SP(p("speed"), kind === "bar" ? "Flow speed" : "Animation speed"),
-    SEL(p("animFps"), "Animation frame rate", [["smooth", "Smooth: your monitor's refresh rate (e.g. 240 fps)"], ["ticks", "Stepped: up to 20 fps (game ticks)"]]));
+    SEL(p("animFps"), "Animation frame rate", [["smooth", "Smooth: your monitor's refresh rate (e.g. 240 fps)"], ["ticks", "Stepped: up to 20 fps (game ticks)"]]),
+    SEL(p("motion"), "Motion", [["random", "Random: wanders, changes speed, shooting stars"], ["loop", "Steady: drifts one way at one speed"]]),
+    R(p("shoot"), "Shooting stars per loop (random)", 0, 5, 1));
   const lightCtl = [AN(p("light"), "Light direction"), R(p("shade"), "Inner shadow", 0, 2.5, 0.01), R(p("falloff"), "Light falloff", 0, 2, 0.01),
     R(p("rimLight"), "Rim light", 0, 2, 0.01), R(p("rimShadow"), "Rim shadow", 0, 2, 0.01)];
   const shineCtl = kind === "bar"
