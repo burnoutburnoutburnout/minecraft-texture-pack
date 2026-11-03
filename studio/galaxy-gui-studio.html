@@ -89,8 +89,8 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .tabs button { appearance: none; border: 1px solid var(--line); background: var(--panel); color: var(--fg); border-radius: 999px; padding: 8px 16px; font: inherit; font-weight: 700; cursor: pointer; }
 .tabs button[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 select { background: var(--panel-2); color: var(--fg); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font: inherit; width: 100%; }
-.vary-grid { grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); }
-.vary-grid .design canvas { width: 96px; height: 96px; }
+.vary-grid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
+.vary-grid .design canvas { width: 116px; height: 116px; }
 .vary-grid .design span { font-size: 12px; text-align: center; }
 .toggle { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; cursor: pointer; }
 .toggle input { width: 18px; height: 18px; accent-color: var(--meat); }
@@ -1472,8 +1472,8 @@ function elSections(key, kind, name, cls) {
 }
 
 const SECTIONS = [
-  { id: "steak-vary", tab: "steak", title: "Steak: pick a small variation", cls: "meat", vary: true,
-    hint: "Each one changes your current steak in one small way. Click one to use it. Make variations again to tweak from there.", groups: [] },
+  { id: "steak-vary", tab: "steak", title: "Steak: pick a slightly different shape", cls: "meat", vary: true,
+    hint: "Each one reshapes your current steak's outline a little; texture, colours and border stay the same. Click one to use it, then make variations again to keep refining.", groups: [] },
   { id: "steak-design", tab: "steak", title: "Steak: start from a design", cls: "meat", chips: "designs",
     hint: "A design sets the texture, border and shape together. Change any part of it in the cards below.", groups: [] },
   { id: "steak-texture", tab: "steak", title: "Steak texture", cls: "meat", chips: [["texturesReal", "Realistic"], ["textures", "Cartoon"]], groups: [
@@ -1664,7 +1664,7 @@ for (const sec of SECTIONS) {
   if (sec.editor) card.appendChild(makeEditor(sec.editor));
   if (sec.vary) {
     const row = document.createElement("div"); row.className = "export-row";
-    row.innerHTML = `<button type="button" class="btn" id="vary-make">Make variations of my steak</button>
+    row.innerHTML = `<button type="button" class="btn" id="vary-make">Make shape variations of my steak</button>
       <button type="button" class="btn" id="vary-back" disabled>Go back to my steak</button>`;
     const grid = document.createElement("div"); grid.className = "designs vary-grid"; grid.id = "vary-grid";
     grid.setAttribute("role", "group"); grid.setAttribute("aria-label", "Steak variations");
@@ -1773,24 +1773,52 @@ function drawThumbs() {
   }
 }
 /* ---------- small variations of the current steak ---------- */
-const shadesFrom = meat => { const m = unhex(meat); return { dark: hex(scale3(m, 0.59)), rim: hex(scale3(m, 1.48)), side: hex(scale3(m, 0.57)) }; };
-const tintMeat = (col, f) => { const m = unhex(col.meat); col.meat = hex(f(m)); if (col.linked) Object.assign(col, shadesFrom(col.meat)); };
+/* Shape-only variations: each nudges the current outline a little. Works on the drawn outline;
+   a slider shape is first turned into dots so it can be reshaped the same way. */
+function outlineFrame(P) {
+  const n = P.length, c = P.reduce((s, p) => [s[0] + p[0] / n, s[1] + p[1] / n], [0, 0]);
+  let sxx = 0, syy = 0, sxy = 0;
+  for (const [x, y] of P) { const dx = x - c[0], dy = y - c[1]; sxx += dx * dx; syy += dy * dy; sxy += dx * dy; }
+  const th = 0.5 * Math.atan2(2 * sxy, sxx - syy);
+  let ax = [Math.cos(th), Math.sin(th)]; if (ax[0] < 0) ax = [-ax[0], -ax[1]];      // long axis, pointing right
+  const nv = [-ax[1], ax[0]];                                                       // across: + is the bottom side
+  const toL = ([x, y]) => [(x - c[0]) * ax[0] + (y - c[1]) * ax[1], (x - c[0]) * nv[0] + (y - c[1]) * nv[1]];
+  const toW = ([u, v]) => [c[0] + u * ax[0] + v * nv[0], c[1] + u * ax[1] + v * nv[1]];
+  return { toL, toW };
+}
+function reshape(sh, fn) {
+  if (!sh.custom || !sh.points || sh.points.length < 3) { sh.points = shapeToPoints(sh, 16); sh.custom = true; }
+  const F = outlineFrame(sh.points), L = sh.points.map(F.toL);
+  const maxU = Math.max(...L.map(p => Math.abs(p[0]))), top = L.filter(p => p[1] < 0 && Math.abs(p[0]) < maxU * 0.65);
+  const dip = top.length ? top.reduce((m, p) => p[1] > m[1] ? p : m) : [0, -1];   // the inward-most point on the top edge
+  let out = fn(L, { maxU, dipU: dip[0], w: maxU * 0.42 }).map(F.toW);
+  const xs = out.map(p => p[0]), ys = out.map(p => p[1]);                          // keep it inside the icon slot
+  const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+  const k = Math.min(1, 8.6 / (x1 - x0), 8.6 / (y1 - y0)), cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+  const sx = cx + Math.max(0, 0.2 - (cx - (cx - x0) * k)) - Math.max(0, cx + (x1 - cx) * k - 8.8);
+  const sy = cy + Math.max(0, 0.2 - (cy - (cy - y0) * k)) - Math.max(0, cy + (y1 - cy) * k - 8.8);
+  sh.points = out.map(([x, y]) => [+(sx + (x - cx) * k).toFixed(3), +(sy + (y - cy) * k).toFixed(3)]);
+}
+const gauss = (x, w) => Math.exp(-((x / w) ** 2));
 const VARIATIONS = [
-  ["A touch darker", (sh, col) => tintMeat(col, m => scale3(m, 0.88))],
-  ["A touch lighter", (sh, col) => tintMeat(col, m => scale3(m, 1.12))],
-  ["A little redder", (sh, col) => tintMeat(col, m => [m[0] * 1.12, m[1] * 0.92, m[2] * 0.95])],
-  ["Warmer brown", (sh, col) => tintMeat(col, m => [m[0] * 1.06, m[1] * 1.08, m[2] * 0.9])],
-  ["Thicker burn lines", sh => { sh.burnW *= 1.25; }],
-  ["Thinner burn lines", sh => { sh.burnW *= 0.78; }],
-  ["Burn lines tilted", sh => { sh.burnAng += 0.14; }],
-  ["Burn lines spread out", sh => { sh.burnSpacing *= 1.15; }],
-  ["More scorch by the lines", sh => { sh.burnHalo += 0.45; }],
-  ["Leans a bit more", sh => { if (sh.custom) sh.rotate = (sh.rotate || 0) + 0.07; else sh.angle -= 0.07; }],
-  ["Thinner outline", sh => { sh.outline *= 0.78; }],
-  ["Bolder outline", sh => { sh.outline = Math.min(1, sh.outline * 1.22); }],
-  ["Thicker cut", sh => { sh.thick += 0.15; }],
-  ["A little shinier", sh => { sh.edgeHi = (sh.edgeHi ?? 0.6) + 0.35; sh.shine += 0.15; }],
-  ["Rougher edge", sh => { sh.rough = [(sh.rough[0] || 0) + 0.035, sh.rough[1] || 4]; }],
+  ["Deeper dip", sh => reshape(sh, (L, o) => L.map(([u, v]) => [u, v < 0 ? v + 0.3 * gauss(u - o.dipU, o.w) : v]))],
+  ["Shallower dip", sh => reshape(sh, (L, o) => L.map(([u, v]) => [u, v < 0 ? v - 0.25 * gauss(u - o.dipU, o.w) : v]))],
+  ["Dip moved left", sh => reshape(sh, (L, o) => L.map(([u, v]) => [v < 0 ? u - 0.4 * gauss(u - o.dipU, o.w) : u, v]))],
+  ["Dip moved right", sh => reshape(sh, (L, o) => L.map(([u, v]) => [v < 0 ? u + 0.4 * gauss(u - o.dipU, o.w) : u, v]))],
+  ["Bigger right end", sh => reshape(sh, (L, o) => L.map(([u, v]) => [u, v * (1 + 0.13 * sstep(0, o.maxU, u))]))],
+  ["Bigger left end", sh => reshape(sh, (L, o) => L.map(([u, v]) => [u, v * (1 + 0.13 * sstep(0, o.maxU, -u))]))],
+  ["Slimmer", sh => reshape(sh, L => L.map(([u, v]) => [u, v * 0.91]))],
+  ["Chubbier", sh => reshape(sh, L => L.map(([u, v]) => [u, v * 1.09]))],
+  ["Longer", sh => reshape(sh, L => L.map(([u, v]) => [u * 1.07, v]))],
+  ["Shorter", sh => reshape(sh, L => L.map(([u, v]) => [u * 0.93, v]))],
+  ["Leans a bit more", sh => { reshape(sh, L => L); sh.rotate = (sh.rotate || 0) + 0.08; }],
+  ["Leans a bit less", sh => { reshape(sh, L => L); sh.rotate = (sh.rotate || 0) - 0.08; }],
+  ["More curved", sh => reshape(sh, (L, o) => L.map(([u, v]) => [u, v - 0.4 * ((u / o.maxU) ** 2 - 0.35)]))],
+  ["Straighter", sh => reshape(sh, (L, o) => L.map(([u, v]) => [u, v + 0.3 * ((u / o.maxU) ** 2 - 0.35)]))],
+  ["Smoother outline", sh => reshape(sh, L => L.map((p, i) => {
+    const a = L[(i - 1 + L.length) % L.length], b = L[(i + 1) % L.length];
+    return [lerp(p[0], (a[0] + b[0]) / 2, 0.4), lerp(p[1], (a[1] + b[1]) / 2, 0.4)];
+  }))],
 ];
 let varyBase = null, varyPicked = -1;
 function makeVariations() {
