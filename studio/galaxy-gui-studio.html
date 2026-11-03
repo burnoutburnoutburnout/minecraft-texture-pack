@@ -88,6 +88,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .tabs { display: flex; flex-wrap: wrap; gap: 6px; position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); padding-block: 8px; }
 .tabs button { appearance: none; border: 1px solid var(--line); background: var(--panel); color: var(--fg); border-radius: 999px; padding: 8px 16px; font: inherit; font-weight: 700; cursor: pointer; }
 .tabs button[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+select { background: var(--panel-2); color: var(--fg); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font: inherit; width: 100%; }
 .toggle { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; cursor: pointer; }
 .toggle input { width: 18px; height: 18px; accent-color: var(--meat); }
 .colors { display: flex; flex-wrap: wrap; gap: 12px; }
@@ -770,12 +771,36 @@ const EL_BORDERS = {
   none: { label: "No outline", outline: 0 }, rough: { label: "Rough", rough: [0.1, 4] }, jagged: { label: "Jagged", rough: [0.1, 9] },
   wavy: { label: "Wavy", wave: [0.1, 14] }, faceted: { label: "Faceted", facets: 12 }, double: { label: "Double line", double: true },
   slab: { label: "3D slab", thick: 0.7 },
+  neon: { label: "Neon", outline: 0.25, outlineStyle: "light", glowOut: 0.9 },
+  halo: { label: "Halo", outline: 0, glowOut: 0.75, glowCol: "white" },
+  sticker: { label: "Sticker", outline: 0.3, sticker: 0.45 },
+  ring: { label: "Outer ring", outline: 0.35, ring: 0.25 },
+  dashed: { label: "Dashed", outline: 0.45, dash: 14 },
+  stitched: { label: "Stitched", outline: 0.35, stitch: 12 },
+  bevel: { label: "Raised bevel", outline: 0.3, bevel: 1 },
+  inset: { label: "Inset bevel", outline: 0.3, bevel: -1 },
+  gold: { label: "Gold rim", outline: 0.6, outlineStyle: "gold" },
+  silver: { label: "Silver rim", outline: 0.6, outlineStyle: "silver" },
+  rainbow: { label: "Rainbow", outline: 0.5, outlineStyle: "rainbow" },
+  gradient: { label: "Shaded line", outline: 0.6, outlineStyle: "gradient" },
+  spiky: { label: "Spiky", wave: [0.12, 18], waveType: "spike" },
+  scalloped: { label: "Scalloped", wave: [0.1, 16], waveType: "scallop" },
+  chunky: { label: "Chunky", rough: [0.18, 2.2] },
+  soft: { label: "Soft edge", outline: 0, feather: 0.6 },
+  shadow: { label: "Drop shadow", drop: 0.7 },
+  comic: { label: "Comic", outline: 0.75, outlineStyle: "ink", double: true },
+  glass: { label: "Glass", outline: 0.2, outlineStyle: "light", bevel: 0.8, glowOut: 0.3 },
+  frost: { label: "Frost", outline: 0.4, outlineStyle: "frost", rough: [0.05, 10], glowOut: 0.4, glowCol: "white" },
 };
-const EL_BORDER_KEYS = ["outline", "rough", "wave", "facets", "double", "thick"];
+/* borders that need room outside the shape (bars fill their whole row, so they are skipped there) */
+const EL_OUTSIDE_BORDERS = ["faceted", "slab", "neon", "halo", "sticker", "ring", "shadow", "glass", "frost"];
+const EL_BORDER_KEYS = ["outline", "rough", "wave", "facets", "double", "thick", "outlineStyle", "glowOut", "glowCol", "ring", "dash", "stitch",
+  "bevel", "sticker", "feather", "drop", "waveType"];
 
 const EL_COMMON = {
   design: "galaxy", texture: "galaxy", stars: 1, texScale: 1, texStrength: 1, speed: 2, glow: 0.32,
   border: "clean", outline: 0.5, rough: [0, 4], wave: [0, 0], facets: 0, double: false, thick: 0,
+  outlineStyle: "solid", glowOut: 0, glowCol: "main", ring: 0, dash: 0, stitch: 0, bevel: 0, sticker: 0, feather: 0, drop: 0, waveType: "sine",
   posX: 0, posY: 0, size: 1, tilt: 0, custom: false, points: [], smooth: 0.85,
   light: 225, shade: 1, falloff: 0, rimLight: 0, rimShadow: 0, shine: 0.28, shineSize: 1, shineX: -1.9, shineY: -1.74,
 };
@@ -1003,7 +1028,11 @@ function elementIcon(kind, S, el, cols, t = 0, mode = "full", flash = false, see
       let d = F[k] / Math.max(Math.hypot(gx, gy), 0.2);
       const X = (i + 0.5) / S, Yr = (j + 0.5) / S - drop, [ra, rf] = el.rough;
       if (ra) { d += ra * samp(T[4], X * rf + 3, Yr * rf); if (rf <= 5) d += ra * 0.35 * samp(T[2], X * rf * 3, Yr * rf * 3); }
-      if (el.wave[0]) d += el.wave[0] * (kind === "bar" ? Math.sin(X * el.wave[1] * 0.25) : Math.sin(Math.atan2(Yr - oy, X - ox) * el.wave[1]));
+      if (el.wave[0]) {
+        const ph = kind === "bar" ? X * el.wave[1] * 0.25 : Math.atan2(Yr - oy, X - ox) * el.wave[1], sn = Math.sin(ph);
+        d += el.waveType === "scallop" ? -el.wave[0] * (Math.abs(Math.sin(ph / 2)) * 2 - 1)
+          : el.waveType === "spike" ? -el.wave[0] * (2.4 * (1 - Math.abs(Math.sin(ph / 2))) ** 3 - 0.6) : el.wave[0] * sn;
+      }
       G[k] = d;
     }
   };
@@ -1017,10 +1046,43 @@ function elementIcon(kind, S, el, cols, t = 0, mode = "full", flash = false, see
   const ow = el.outline, outCol = unhex(el.outlineCol), R = kind === "bar" ? 2.5 : 4, img = newImg(S, E.w, E.h);
   const emptyC = el.emptyCol ? unhex(el.emptyCol) : [0, 0, 0], bgC = el.bgCol ? unhex(el.bgCol) : [0, 0, 0];
   const q = { kind, el, P, t: tt, seed, fv: null, X: 0, Y: 0, ex: 0, ey: 0 };
+  const deco = mode !== "bg" && mode !== "empty";
+  const glowC = el.glowCol === "white" ? WHITE : el.glowCol === "outline" ? outCol : P.bright;
+  const stickerC = mixc(WHITE, P.bright, 0.1), dsx = Math.round(0.45 * S), dsy = Math.round(0.55 * S);
+  const softA = d => el.feather > 0 ? sat(0.5 - d / el.feather) : cov(d);
+  const outStyle = (X, Y, facing, base) => {                      // outline colour for each outline style
+    switch (el.outlineStyle) {
+      case "light": return mixc(P.bright, WHITE, 0.25);
+      case "ink": return rgb(8, 6, 10);
+      case "frost": return mixc(rgb(225, 245, 255), WHITE, sat(facing));
+      case "gradient": return mixc(scale3(base, 0.5), mixc(base, P.bright, 0.6), sat(0.5 + facing * 0.7));
+      case "gold": { const b = sat(0.5 + facing * 0.6 + 0.25 * Math.sin((X + Y) * 3)); return mixc(rgb(120, 70, 12), rgb(255, 226, 130), b); }
+      case "silver": { const b = sat(0.5 + facing * 0.6 + 0.25 * Math.sin((X + Y) * 3)); return mixc(rgb(90, 92, 110), rgb(245, 247, 255), b); }
+      case "rainbow": { const hh = (Math.atan2(Y - oy, X - ox) / TAU + 1) % 1;
+        return [0.5 + 0.5 * Math.cos(TAU * hh), 0.5 + 0.5 * Math.cos(TAU * (hh - 1 / 3)), 0.5 + 0.5 * Math.cos(TAU * (hh - 2 / 3))]; }
+    }
+    return base;
+  };
   for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
     const k = j * W + i, d = D[k], ds = DS ? DS[k] : Infinity, body = Math.min(d, ds);
-    let a = cov(body); if (a <= 0) continue;
-    const X = (i + 0.5) / S, Y = (j + 0.5) / S, inner = cov(body + ow);
+    const X = (i + 0.5) / S, Y = (j + 0.5) / S;
+    let a = softA(body);
+    // decorations outside the shape: sticker edge, outer ring, glow, drop shadow
+    let oa = 0, oc = [0, 0, 0];
+    if (deco && a < 1) {
+      const add = (col, al) => { if (al <= 0) return; const na = oa + al * (1 - oa); oc = mixc(col, oc, oa * (1 - al) / Math.max(na, 1e-6) ); oa = na; };
+      if (el.sticker > 0) add(stickerC, cov(body - el.sticker));
+      if (el.ring > 0) add(outStyle(X, Y, 0, outCol), cov(Math.abs(body - el.ring - 0.12) - 0.12));
+      if (el.glowOut > 0 && body > 0) add(glowC, el.glowOut * 0.75 * Math.exp(-body / 0.5));
+      if (el.drop > 0 && i >= dsx && j >= dsy) {
+        const kb = (j - dsy) * W + (i - dsx); add(rgb(8, 4, 12), el.drop * 0.6 * sat(0.5 - Math.min(D[kb], DS ? DS[kb] : Infinity) / 0.45));
+      }
+      if (mode === "half") oa *= cov(X - ox);
+      oa *= sstep(0, 0.9, Math.min(X, Y, E.w - X, E.h - Y));     // fade out before the edge of the icon slot
+    }
+    if (a <= 0 && oa <= 0) continue;
+    if (a <= 0) { setPx(img, k, oa, oc); continue; }
+    const inner = el.feather > 0 && ow === 0 ? 1 : cov(body + ow);
     let c;
     if (mode === "bg") {
       const f = 1 - 0.35 * sat((2.6 - Y) / 2);
@@ -1053,15 +1115,36 @@ function elementIcon(kind, S, el, cols, t = 0, mode = "full", flash = false, see
             g = mixc(g, WHITE, sat(-sh / 0.5) * el.shine);
           }
         }
+        if (el.bevel) {                                       // raised (+) or inset (-) bevel band inside the edge
+          const gx = (D[j * W + Math.min(i + 1, W - 1)] - D[j * W + Math.max(i - 1, 0)]) * S / 2;
+          const gy = (D[Math.min(j + 1, H - 1) * W + i] - D[Math.max(j - 1, 0) * W + i]) * S / 2;
+          const band = 1 - sstep(0, 0.55, -d - ow), f = (gx * lc + gy * ls) * Math.sign(el.bevel);
+          g = mixc(g, mixc(P.bright, WHITE, 0.4), sat(band * sstep(0, 0.6, f) * Math.abs(el.bevel) * 0.7));
+          g = mixc(g, scale3(P.dark, 0.6), sat(band * sstep(0, 0.6, -f) * Math.abs(el.bevel) * 0.6));
+        }
+        if (el.stitch > 0) {                                   // dashed stitching just inside the edge
+          const ang = kind === "bar" ? X * 0.5 : Math.atan2(Y - oy, X - ox) * el.stitch;
+          g = mixc(g, mixc(P.bright, WHITE, 0.5), cov(Math.abs(d + ow + 0.32) - 0.06) * sstep(0.1, 0.4, Math.sin(ang)) * 0.9);
+        }
         if (DS && d >= 0) g = mixc(scale3(P.deep, 0.75), scale3(P.dark, 0.9), sat((X - ox + 4) / 8));
         if (DS) g = mixc(g, scale3(P.dark, 0.6), cov(Math.abs(d) - 0.07) * (ds < 0 ? 1 : 0));
         if (flash) g = mixc(g, WHITE, 0.4);
       }
       if (el.double && mode !== "container") g = mixc(g, mixc(P.bright, WHITE, 0.2), cov(Math.abs(body + ow + 0.12) - 0.05) * 0.85);
-      const out = flash ? rgb(250, 244, 255) : mode === "container" ? unhex(el.emptyOutline || "#040208") : outCol;
+      let out = flash ? rgb(250, 244, 255) : mode === "container" ? unhex(el.emptyOutline || "#040208") : outCol;
+      if (!flash && mode !== "container" && el.outlineStyle !== "solid") {
+        const gx = (D[j * W + Math.min(i + 1, W - 1)] - D[j * W + Math.max(i - 1, 0)]) * S / 2;
+        const gy = (D[Math.min(j + 1, H - 1) * W + i] - D[Math.max(j - 1, 0) * W + i]) * S / 2;
+        out = outStyle(X, Y, gx * lc + gy * ls, outCol);
+      }
+      if (el.dash > 0 && mode !== "container") {             // two-tone dashed rim
+        const ang = kind === "bar" ? X * 0.6 : Math.atan2(Y - oy, X - ox) * el.dash;
+        out = mixc(out, mixc(P.bright, WHITE, 0.35), sstep(-0.12, 0.12, Math.sin(ang)));
+      }
       c = mixc(out, g, inner);
     }
     if (mode === "half") a *= cov(X - ox);
+    if (oa > 0) { const A = a + oa * (1 - a), w = oa * (1 - a); c = [(c[0] * a + oc[0] * w) / A, (c[1] * a + oc[1] * w) / A, (c[2] * a + oc[2] * w) / A]; a = A; }
     setPx(img, k, a, c);
   }
   return toRGBA(img);
@@ -1148,7 +1231,8 @@ const SP = (path, label) => ({ type: "speed", path, label });
 const D = (path, label, min, max, step) => ({ type: "deg", path, label, min, max, step });
 const TG = (path, label) => ({ type: "toggle", path, label });
 const AN = (path, label) => ({ type: "angle", path, label, min: 0, max: 360, step: 1 });
-const INT_PATHS = /(burnCount|facets|segments|wave\.1)$/;
+const SEL = (path, label, options) => ({ type: "select", path, label, options });
+const INT_PATHS = /(burnCount|facets|segments|wave\.1|dash|stitch)$/;
 
 function elSections(key, kind, name, cls) {
   const p = s => key + "." + s;
@@ -1167,6 +1251,14 @@ function elSections(key, kind, name, cls) {
   const borderCtl = [R(p("outline"), "Outline thickness", 0, 1.2, 0.01), R(p("rough.0"), "Roughness", 0, 0.45, 0.005), R(p("rough.1"), "Roughness detail", 1, 16, 0.1),
     R(p("wave.0"), "Ripples", 0, 0.45, 0.005), R(p("wave.1"), "Ripple count", 0, 40, 1)];
   if (kind !== "bar") borderCtl.push(R(p("facets"), "Facets", 0, 24, 1), R(p("thick"), "3D thickness", 0, 1.5, 0.01));
+  borderCtl.push(SEL(p("waveType"), "Ripple shape", [["sine", "Wavy"], ["scallop", "Scalloped"], ["spike", "Spiky"]]),
+    SEL(p("outlineStyle"), "Outline style", [["solid", "Solid colour"], ["gradient", "Shaded"], ["light", "Bright"], ["ink", "Ink black"],
+      ["gold", "Gold"], ["silver", "Silver"], ["rainbow", "Rainbow"], ["frost", "Frost"]]),
+    R(p("dash"), "Dashes", 0, 30, 1), R(p("stitch"), "Stitches", 0, 30, 1), R(p("bevel"), "Bevel (negative = inset)", -1.5, 1.5, 0.01),
+    R(p("feather"), "Soft edge", 0, 1.2, 0.01));
+  if (kind !== "bar") borderCtl.push(R(p("glowOut"), "Outer glow", 0, 1.5, 0.01),
+    SEL(p("glowCol"), "Glow colour", [["main", "Highlight colour"], ["white", "White"], ["outline", "Outline colour"]]),
+    R(p("sticker"), "Sticker border", 0, 0.8, 0.01), R(p("ring"), "Outer ring gap", 0, 0.8, 0.01), R(p("drop"), "Drop shadow", 0, 1, 0.01));
   borderCtl.push(TG(p("double"), "Inner highlight line"));
   const texCtl = [R(p("stars"), "Stars", 0, 3, 0.05), R(p("texScale"), "Texture size", 0.3, 3, 0.01), R(p("texStrength"), "Texture strength", 0, 1, 0.01), R(p("glow"), "Edge glow", 0, 1, 0.01)];
   if (kind !== "armor") texCtl.push(SP(p("speed"), kind === "bar" ? "Flow speed" : "Animation speed"));
@@ -1406,6 +1498,13 @@ for (const sec of SECTIONS) {
           else if (["steakCol.dark", "steakCol.rim", "steakCol.side"].includes(ctl.path)) { st.steakCol.linked = false; syncInputs(); }
           changed();
         });
+      } else if (ctl.type === "select") {
+        const f = document.createElement("div"); f.className = "field";
+        const lab = document.createElement("label"); lab.htmlFor = id; lab.textContent = ctl.label;
+        const sel = document.createElement("select"); sel.id = id;
+        for (const [v, l] of ctl.options) { const o = document.createElement("option"); o.value = v; o.textContent = l; sel.appendChild(o); }
+        f.append(lab, sel); slidersBox.appendChild(f);
+        sel.addEventListener("change", () => { setP(ctl.path, sel.value); changed(); });
       } else if (ctl.type === "toggle") {
         const f = document.createElement("label"); f.className = "toggle"; f.htmlFor = id;
         const inp = document.createElement("input"); inp.type = "checkbox"; inp.id = id; f.append(inp, ctl.label); slidersBox.appendChild(f);
@@ -1452,7 +1551,7 @@ for (const [key, kind] of [["heart", "heart"], ["armor", "armor"], ["xp", "bar"]
     pick: n => applyElDesign(kind, st[key], n), sel: () => st[key].design };
   chipSets["textures-" + key] = { tab: key, kind, names: EL_TEXTURES, label: n => EL_TEX_LABEL[n], render: n => elThumb(kind, Object.assign(clone(st[key]), { texture: n })),
     pick: n => { st[key].texture = n; }, sel: () => st[key].texture };
-  chipSets["borders-" + key] = { tab: key, kind, names: Object.keys(EL_BORDERS).filter(b => kind !== "bar" || (b !== "faceted" && b !== "slab")),
+  chipSets["borders-" + key] = { tab: key, kind, names: Object.keys(EL_BORDERS).filter(b => kind !== "bar" || !EL_OUTSIDE_BORDERS.includes(b)),
     label: n => EL_BORDERS[n].label, render: n => elThumb(kind, Object.assign(clone(st[key]), elBorderPreset(n))),
     pick: n => Object.assign(st[key], elBorderPreset(n)), sel: () => st[key].border };
 }
@@ -1480,6 +1579,7 @@ function syncInputs() {
     const v = getP(ctl.path), inp = $(idOf(ctl.path));
     if (ctl.type === "color") inp.value = v;
     else if (ctl.type === "toggle") inp.checked = !!v;
+    else if (ctl.type === "select") inp.value = v;
     else { inp.value = ctl.type === "speed" ? 5 - v : v; $(idOf(ctl.path) + "-o").textContent = fmt(ctl, v); }
   }
   for (const [set, cfg] of Object.entries(chipSets)) for (const b of $("chips-" + set).children) b.setAttribute("aria-pressed", String(b.dataset.name === cfg.sel()));
