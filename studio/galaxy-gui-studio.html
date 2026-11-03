@@ -488,10 +488,9 @@ function rotPt(sh, x, y, inv = false) {
   const a = (sh.rotate || 0) * (inv ? -1 : 1), c = Math.cos(a), s = Math.sin(a), dx = x - 4.5, dy = y - 4.2;
   return [4.5 + dx * c - dy * s, 4.2 + dx * s + dy * c];
 }
-/* A cleaned-up kidney-bean steak: big rounded lobe top right, smaller lobe bottom left,
-   a soft dip on the top-left edge, and wide enough to overlap its neighbours in the bar. */
-const BEAN_POINTS = [[0.25, 6.15], [0.75, 4.75], [1.95, 3.95], [3.15, 3.55], [3.85, 2.3], [4.95, 1.0], [6.5, 0.45],
-  [7.95, 0.9], [8.8, 2.25], [8.75, 4.05], [7.8, 5.7], [6.15, 7.0], [4.3, 7.85], [2.45, 8.1], [0.95, 7.45]];
+/* A cleaned-up bean steak: even, leaning body with a soft dip on the top-left edge,
+   wide enough to overlap its neighbours in the bar. */
+const BEAN_POINTS = [[0.39, 6.31], [0.2, 4.55], [1.17, 3.11], [2.65, 2.58], [3.45, 1.85], [4.52, 1.49], [5.83, 1.2], [7.57, 1.29], [8.8, 2.55], [8.5, 4.32], [7.48, 5.53], [6.52, 6.25], [5.64, 6.75], [4.67, 7.21], [3.38, 7.6], [1.66, 7.53]];
 /* Sample the slider shape's outline into editable points. */
 function shapeToPoints(sh, n = 12) {
   const pts = [];
@@ -1314,7 +1313,7 @@ function wireEditor(key) {
     changed();
   });
   if (key === "steak") $("ed-bean").addEventListener("click", () => {
-    Object.assign(st.shape, { custom: true, points: clone(BEAN_POINTS), smooth: 1, rotate: 0.12, posX: 0, posY: 0, size: 1, facets: 0 });
+    Object.assign(st.shape, { custom: true, points: clone(BEAN_POINTS), smooth: 1, rotate: 0, posX: 0, posY: 0, size: 1, facets: 0 });
     syncInputs(); changed();
   });
   $("ed-fewer-" + key).addEventListener("click", () => {     // keep every other dot (never fewer than 3)
