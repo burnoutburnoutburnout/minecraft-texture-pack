@@ -436,7 +436,7 @@ const SHAPE_BASE = { texture: "grill", border: "rough", rough: [0.13, 4], lump: 
   outlineCol: "#120703", double: false, thick: 0.65, lift: 0, arch: 0, dip: 0, dipX: 0.15, dipW: 0.55,
   rx: 3.95, ry: 2.2, p: 2.4, angle: -0.5, texStrength: 1, texScale: 1, burnW: 1, burnAng: 0,
   posX: 0, posY: 0, size: 1, bend: 0, taper: 0, liftL: 0, bulge: 0, dipB: 0, dipBX: 0, dipBW: 0.6,
-  custom: false, points: [], smooth: 0.85, rotate: 0,
+  custom: false, points: [], smooth: 0.85, rotate: 0, shadow: 0.5, edgeHi: 0.6,
   burnCount: 0, burnSpacing: 1, burnOffset: 0, burnHalo: 1, cross: false,
   light: 225, shade: 1, rimLight: 1, rimShadow: 1, shine: 0, shineSize: 1, shineX: -1.8 };
 const BORDER_KEYS = ["rough", "lump", "wave", "facets", "outline", "outlineCol", "double", "thick"];
@@ -697,16 +697,33 @@ function steakIcon(S, st, kind = "full", flash = false, hunger = false, shOverri
   for (let i = 0; i < 70; i++) ctx.specks.push({ x: -3.8 + r() * 7.6, y: -2.2 + r() * 4.4, r: 0.09 + r() * 0.19, c: [C.dark, C.light, scale3(C.dark, 0.85)][i % 3] });
   for (let i = 0; i < 14; i++) ctx.drops.push({ x: -3.3 + r() * 6.6, y: -1.6 + r() * 3.2 });
   const outlineCol = unhex(sh.outlineCol), tintC = unhex(st.hungerTint);
+  // body distance; a half steak is cut at the middle, and the cut gets its own outline
+  const B = new Float32Array(W * H);
+  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+    const k = j * W + i; B[k] = Math.min(top.D[k], side.D[k]);
+    if (kind === "half") B[k] = Math.max(B[k], 4.5 - (i + 0.5) / S);
+  }
+  const shA = (sh.shadow ?? 0.5) * (kind === "container" ? 0.5 : 1), sdx = Math.round(0.4 * S), sdy = Math.round(0.5 * S);
+  const shadowC = rgb(12, 6, 3);
   for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
     const k = j * W + i, X = (i + 0.5) / S, Y = (j + 0.5) / S;
-    const t = top.D[k], sd = side.D[k], body = Math.min(t, sd);
-    let a = cov(body); if (a <= 0) continue;
+    const t = top.D[k], sd = side.D[k], body = B[k];
+    const a = cov(body);
+    // soft drop shadow down-right, so overlapping steaks read as separate pieces
+    let sA = 0;
+    if (shA > 0 && a < 1 && i >= sdx && j >= sdy) sA = shA * 0.55 * sat(0.5 - B[(j - sdy) * W + (i - sdx)] / 0.45);
+    if (a <= 0 && sA <= 0) continue;
+    if (a <= 0) { img.a[k] = sA; img.col.set(shadowC, k * 3); continue; }
     const inner = cov(body + ow);
     let c;
     if (kind === "container") {
-      const fill = hunger ? rgb(26, 34, 14) : rgb(34, 20, 14);
+      // empty slot: dark, softly shaded and with a faint inner rim, instead of a flat blob
+      const lp = -((X - lcx) * lc + (Y - lcy) * ls);
+      let fill = hunger ? rgb(30, 40, 16) : rgb(44, 27, 19);
+      fill = scale3(fill, 1.25 - 0.45 * sat((lp + 3) / 6));
+      fill = mixc(fill, scale3(fill, 1.7), cov(Math.abs(body + ow + 0.16) - 0.05) * 0.45);
       c = mixc(flash ? rgb(250, 240, 232) : rgb(10, 5, 2), fill, inner);
-      c = mixc(c, rgb(22, 13, 9), cov(Math.abs(t) - 0.1) * (sd < 0 ? 1 : 0) * inner);
+      c = mixc(c, rgb(24, 14, 10), cov(Math.abs(t) - 0.1) * (sd < 0 ? 1 : 0) * inner);
     } else {
       ctx.lp = -((X - lcx) * lc + (Y - lcy) * ls);
       let face = steakTexture(sh.texture, X / tsc, Y / tsc, top.EX[k] / tsc, top.EY[k] / tsc, t, C, seed, ctx, d => cov(d * tsc));
@@ -715,6 +732,8 @@ function steakIcon(S, st, kind = "full", flash = false, hunger = false, shOverri
       const facing = gx * lc + gy * ls, edge = sstep(-0.95, -0.3, t);
       face = mixc(face, C.rim, sat(edge * sstep(0.2, 0.7, facing) * 0.7 * sh.rimLight));
       face = mixc(face, C.side, sat(edge * sstep(0.2, 0.7, -facing) * 0.5 * sh.rimShadow));
+      // crisp highlight just inside the outline on the lit side: keeps the shape readable at HUD size
+      if (sh.edgeHi > 0 && t < 0) face = mixc(face, mixc(C.rim, WHITE, 0.3), sat(cov(Math.abs(t + ow + 0.16) - 0.07) * sstep(0.05, 0.5, facing) * sh.edgeHi));
       if (sh.shine > 0) {
         const gl = sdEllipse(top.EX[k], top.EY[k], sh.shineX, -sh.ry * 0.5, 0.9 * sh.shineSize, 0.24 * sh.shineSize, 0);
         face = mixc(face, rgb(255, 236, 222), sat(-gl / 0.25) * sh.shine * (t < 0 ? 1 : 0));
@@ -727,8 +746,9 @@ function steakIcon(S, st, kind = "full", flash = false, hunger = false, shOverri
       if (sh.double) c = mixc(c, scale3(C.rim, 1.15), cov(Math.abs(body + ow + 0.12) - 0.05));
       c = mixc(out, c, inner);
     }
-    if (kind === "half") a *= cov(4.5 - X);
-    img.a[k] = a; img.col.set([sat(c[0]), sat(c[1]), sat(c[2])], k * 3);
+    const A = a + sA * (1 - a), w = sA * (1 - a);
+    img.a[k] = A;
+    img.col.set([sat((c[0] * a + shadowC[0] * w) / A), sat((c[1] * a + shadowC[1] * w) / A), sat((c[2] * a + shadowC[2] * w) / A)], k * 3);
   }
   return toRGBA(img);
 }
@@ -1202,6 +1222,7 @@ const SECTIONS = [
     { controls: [AN("shape.light", "Light direction"), R("shape.shade", "Shading", 0, 2.5, 0.01),
       R("shape.rimLight", "Rim light", 0, 2, 0.01), R("shape.rimShadow", "Rim shadow", 0, 2, 0.01)] },
     { label: "Shine spot", controls: [R("shape.shine", "Strength", 0, 1, 0.01), R("shape.shineSize", "Size", 0.3, 3, 0.01), R("shape.shineX", "Position", -4, 4, 0.05)] },
+    { label: "Hunger bar finish", controls: [R("shape.shadow", "Drop shadow", 0, 1, 0.01), R("shape.edgeHi", "Edge highlight", 0, 1.5, 0.01)] },
   ] },
   { id: "steak-colors", tab: "steak", title: "Steak colours", cls: "meat", groups: [
     { controls: [C("steakCol.meat", "Meat"), C("steakCol.dark", "Seared"), C("steakCol.rim", "Highlight"), C("steakCol.side", "Side"),
