@@ -18,6 +18,7 @@ Usage:
     python3 generator/build.py                  # builds 256x and 512x into dist/
     python3 generator/build.py --res 256        # only one resolution
     python3 generator/build.py --preview        # also writes preview images
+    python3 generator/build.py --steak t-bone   # choose a steak design
 
 Requires: numpy, Pillow
 """
@@ -210,6 +211,44 @@ WHITE = rgb(255, 255, 255)
 
 
 # --------------------------------------------------------------------------- #
+# Steak variants (pick one with --steak NAME; see previews/steak-variants.png)
+# --------------------------------------------------------------------------- #
+DARK_STEAK = dict(base=(128, 66, 44), mid=(114, 56, 36), dark=(88, 40, 24),
+                  light=(150, 86, 60), rim=(168, 104, 76), side=(80, 38, 22),
+                  side2=(52, 22, 12), outline=(28, 11, 5))
+
+STEAK_BASE = dict(cx=4.5, cy=4.2, rx=3.95, ry=2.2, p=2.4, angle=-0.5, lump=0.16,
+                  lump_freq=1.6, thick=0.65, outline_w=0.42, colors=DARK_STEAK,
+                  burns=(-2.1, 0.0, 2.1), burn_slant=0.55, burn_w=0.2, crosshatch=False,
+                  bone=None, fat=False, char=0.0, gloss=0.45, seed=2)
+
+STEAK_VARIANTS = {
+    "classic": dict(),
+    "crosshatch": dict(burns=(-2.4, -0.8, 0.8, 2.4), burn_w=0.13, crosshatch=True,
+                       burn_slant=1.0),
+    "t-bone": dict(bone="t", burns=(-2.6, 2.4), ry=2.3, p=2.2),
+    "ribeye-fat": dict(fat=True, rx=3.7, ry=2.45, p=2.0, lump=0.25, lump_freq=2.2,
+                       burns=(-1.3, 1.0)),
+    "charred": dict(char=0.75, burns=(-2.4, -0.8, 0.8, 2.4), burn_w=0.16, gloss=0.25,
+                    colors=dict(DARK_STEAK, base=(104, 50, 32), mid=(92, 42, 26),
+                                light=(124, 66, 44), rim=(140, 80, 56))),
+    "thick-cut": dict(rx=3.6, ry=2.0, thick=1.3, cy=3.7, p=3.0, angle=-0.4,
+                      burns=(-1.6, 0.0, 1.6), burn_w=0.24),
+    "tomahawk": dict(bone="tomahawk", cx=5.5, cy=3.9, rx=2.8, ry=2.15, p=2.1,
+                     angle=-0.55, burns=(-0.9, 0.9), outline_w=0.3),
+    "filet": dict(rx=3.0, ry=2.6, p=2.0, thick=1.1, cy=3.8, angle=-0.3, lump=0.06,
+                  burns=(-1.1, 0.0, 1.1), burn_slant=-1.0, burn_w=0.18),
+    "rustic": dict(lump=0.38, lump_freq=2.8, p=2.0, burns=(-2.2, 0.0, 2.2),
+                   burn_slant=-0.5, burn_w=0.26, seed=4),
+    "glossy": dict(rx=4.0, ry=2.05, p=2.8, angle=-0.6, thick=0.8, outline_w=0.3,
+                   burns=(-1.7, 0.4), burn_w=0.28, burn_slant=1.2, gloss=0.75,
+                   colors=dict(DARK_STEAK, base=(136, 64, 40), mid=(118, 52, 32),
+                               light=(166, 90, 60), rim=(190, 116, 84))),
+}
+STEAK_DEFAULT = "classic"
+
+
+# --------------------------------------------------------------------------- #
 # Renderer
 # --------------------------------------------------------------------------- #
 class Renderer:
@@ -338,72 +377,107 @@ class Renderer:
         return to_rgba(col, alpha)
 
     # ---------------- steak (hunger) ----------------
-    STEAK_ANGLE = -0.5
-
-    def steak_slab(self, X, Y, drop=0.0):
-        """Long rounded slab tilted up to the right (the Minecraft steak silhouette),
-        with a gently lumpy top edge. Returns (signed distance, along, across)."""
-        cx, cy, rx, ry, p = 4.5, 4.15 + drop, 3.95, 2.2, 2.4
-        a = self.STEAK_ANGLE
-        dx, dy = X - cx, Y - cy
+    # ---------------- steak (hunger) ----------------
+    def steak_slab(self, X, Y, V, drop=0.0):
+        """Rounded slab (superellipse) with a lumpy top edge.
+        Returns (signed distance, along-axis coord, across-axis coord)."""
+        a = V["angle"]
+        dx, dy = X - V["cx"], Y - (V["cy"] + drop)
         ex = dx * math.cos(a) + dy * math.sin(a)
         ey = -dx * math.sin(a) + dy * math.cos(a)
-        ry_ = ry + np.where(ey < 0, 0.16 * np.sin(ex * 1.6 + 0.4), 0.0)
-        f = (np.abs(ex / rx) ** p + np.abs(ey / ry_) ** p) ** (1.0 / p) - 1.0
+        lump = V["lump"] * np.sin(ex * V["lump_freq"] + 0.4)
+        ry_ = V["ry"] + np.where(ey < 0, lump, lump * 0.4)
+        p = V["p"]
+        f = (np.abs(ex / V["rx"]) ** p + np.abs(ey / ry_) ** p) ** (1.0 / p) - 1.0
         gy, gx = np.gradient(f, 1.0 / self.S)
         return f / np.maximum(np.hypot(gx, gy), 1e-4), ex, ey
 
-    def steak(self, kind="full", flash=False, hunger=False):
-        """Cartoon HD version of the Minecraft steak: same long diagonal shape and
-        browns (lighter top-left, darker bottom-right rim), bold outline, cel
-        shading and black grill burn lines."""
+    def steak_bone(self, X, Y, V, ex, ey):
+        """Bone sticking out of the steak's left end (tomahawk style)."""
+        rx = V["rx"]
+        seg_lo, seg_hi = -rx - 1.3, -rx + 0.8
+        t = np.clip(ex, seg_lo, seg_hi)
+        shaft = np.hypot(ex - t, ey - 0.25) - 0.6
+        knob = np.minimum(np.hypot(ex - seg_lo, ey - 0.25 + 0.5) - 0.62,
+                          np.hypot(ex - seg_lo, ey - 0.25 - 0.5) - 0.62)
+        return smin(shaft, knob, 0.25)
+
+    def steak(self, kind="full", flash=False, hunger=False, variant=None):
+        """Cartoon HD steak in the style of the Minecraft steak. Its shape, colours,
+        burn lines and extras (bones, fat rim, char) come from STEAK_VARIANTS."""
+        V = dict(STEAK_BASE, **STEAK_VARIANTS[variant or STEAK_DEFAULT])
         X, Y = self.grid(9, 9)
-        top, ex, ey = self.steak_slab(X, Y)
-        side, _, _ = self.steak_slab(X, Y, drop=0.65)
+        top, ex, ey = self.steak_slab(X, Y, V)
+        side, _, _ = self.steak_slab(X, Y, V, drop=V["thick"])
         body = np.minimum(top, side)
+        bone = None
+        if V["bone"] == "tomahawk":
+            bone = self.steak_bone(X, Y, V, ex, ey)
+            body = np.minimum(body, bone)
         alpha = self.cov(body)
-        ow = 0.42
+        ow = V["outline_w"]
         inner = self.cov(body + ow)
         if kind == "container":
-            fill = rgb(26, 34, 14) if hunger else rgb(40, 26, 20)
-            outline = rgb(250, 240, 232) if flash else rgb(14, 7, 4)
+            fill = rgb(26, 34, 14) if hunger else rgb(36, 22, 16)
+            outline = rgb(250, 240, 232) if flash else rgb(12, 6, 3)
             col = mix(outline, np.broadcast_to(fill, X.shape + (3,)), inner)
-            col = mix(col, rgb(28, 18, 13), self.cov(np.abs(top) - 0.1) * (side < 0) * inner)
+            col = mix(col, rgb(24, 15, 10), self.cov(np.abs(top) - 0.1) * (side < 0) * inner)
         else:
-            # top face: Minecraft-steak browns with soft, chunky lighter/darker patches
-            n = fbm(2, X * 6.0 + 20.0, Y * 6.0 + 60.0)
-            face = mix(rgb(156, 90, 64), rgb(142, 78, 54), sat(0.5 + 0.4 * n))
-            face = mix(face, rgb(120, 62, 42), smoothstep(0.35, 0.6, n) * 0.8)
-            face = mix(face, rgb(178, 110, 80), smoothstep(-0.5, -0.8, n) * 0.85)
-            # broad light from the top-left, darker toward the bottom-right
-            face = face * (1.08 - 0.22 * sat((ey + 1.6) / 3.2))[..., None]
-            # cel shading on the rim of the top face
+            C = {k: rgb(*v) for k, v in V["colors"].items()}
+            on_face = smoothstep(-0.2, -0.55, top)
+            # top face: chunky lighter/darker patches
+            n = fbm(V["seed"], X * 6.0 + 20.0, Y * 6.0 + 60.0)
+            face = mix(C["base"], C["mid"], sat(0.5 + 0.4 * n))
+            face = mix(face, C["dark"], smoothstep(0.35, 0.6, n) * 0.8)
+            face = mix(face, C["light"], smoothstep(-0.5, -0.8, n) * 0.8)
+            if V["char"]:
+                n2 = fbm(V["seed"] + 3, X * 7.0 + 5.0, Y * 7.0 + 9.0)
+                face = mix(face, rgb(24, 12, 8), smoothstep(0.6, 0.95, n2) * V["char"])
+            face = face * (1.06 - 0.22 * sat((ey + 1.6) / 3.2))[..., None]
+            # cel shading on the rim of the top face (light from the top-left)
             gy, gx = np.gradient(top, 1.0 / self.S)
             facing = -(gx + gy) / math.sqrt(2.0)
             edge = smoothstep(-1.0, -0.3, top)
-            face = mix(face, rgb(196, 128, 96), edge * smoothstep(0.2, 0.7, facing) * 0.85)
-            face = mix(face, rgb(102, 50, 32), edge * smoothstep(0.2, 0.7, -facing) * 0.6)
-            # black grill burn lines across the steak (slightly slanted, tapered ends)
-            u = ex + 0.55 * ey
+            face = mix(face, C["rim"], edge * smoothstep(0.2, 0.7, facing) * 0.8)
+            face = mix(face, C["side"], edge * smoothstep(0.2, 0.7, -facing) * 0.6)
+            # fat rim along the upper edge
+            if V["fat"]:
+                band = smoothstep(-0.75, -0.6, top) * (ey < 0) * smoothstep(-0.3, -1.0, ey)
+                fat = mix(rgb(206, 170, 128), rgb(236, 210, 174), smoothstep(-0.2, -0.6, top))
+                face = mix(face, fat, band)
+                face = mix(face, C["side"], self.cov(np.abs(top + 0.72) - 0.05) * band * 0.8)
+            # T-bone in the middle of the face
+            if V["bone"] == "t":
+                stem = sd_box(ex, ey, -0.7, 0.0, 0.26, V["ry"] - 0.55, 0.2)
+                bar = sd_box(ex, ey, 0.6, -0.15, 1.3, 0.24, 0.2)
+                tb = np.minimum(stem, bar)
+                face = mix(face, rgb(60, 34, 22), self.cov(tb - 0.12))
+                face = mix(face, rgb(238, 228, 208), self.cov(tb))
+                face = mix(face, rgb(196, 182, 160), self.cov(tb) * sat((ey + 0.2) / 0.6) * 0.5)
+            # black grill burn lines
             burn = np.zeros_like(X)
-            for c in (-2.1, 0.0, 2.1):
-                w = 0.2 * (1.0 - 0.45 * sat(np.abs(ey) / 2.0))
-                burn = np.maximum(burn, self.cov(np.abs(u - c) - w))
-            burn = burn * smoothstep(-0.2, -0.55, top)
-            # charred halo around each burn, then the black line itself
             halo = np.zeros_like(X)
-            for c in (-2.1, 0.0, 2.1):
-                halo = np.maximum(halo, np.exp(-((u - c) / 0.42) ** 2))
-            face = mix(face, rgb(92, 44, 28), halo * smoothstep(-0.2, -0.55, top) * 0.5)
-            face = mix(face, rgb(18, 10, 7), burn)
-            # small glossy highlight
-            gl = sd_ellipse(X, Y, 2.55, 4.0, 0.9, 0.26, self.STEAK_ANGLE)
-            face = mix(face, rgb(255, 236, 222), sat(-gl / 0.3) * 0.5)
+            fams = [V["burn_slant"]] + ([-V["burn_slant"] - 1.2] if V["crosshatch"] else [])
+            for k in fams:
+                u = (ex + k * ey) / math.sqrt(1.0 + k * k)
+                for c in V["burns"]:
+                    w = V["burn_w"] * (1.0 - 0.45 * sat(np.abs(ey) / 2.0))
+                    burn = np.maximum(burn, self.cov(np.abs(u - c) - w))
+                    halo = np.maximum(halo, np.exp(-((u - c) / (V["burn_w"] * 2.1)) ** 2))
+            face = mix(face, C["dark"], halo * on_face * 0.55)
+            face = mix(face, rgb(14, 8, 5), burn * on_face)
+            if V["gloss"]:
+                gl = sd_ellipse(X, Y, V["cx"] - 1.9, V["cy"] - 0.2, 0.85, 0.24, V["angle"])
+                face = mix(face, rgb(255, 236, 222), sat(-gl / 0.3) * V["gloss"])
             # dark bottom-right rim (the thickness of the steak)
-            sidec = mix(rgb(96, 46, 30), rgb(66, 30, 18), sat((X - 1.0) / 7.0))
+            sidec = mix(C["side"], C["side2"], sat((X - 1.0) / 7.0))
             col = np.where((top < 0)[..., None], face, sidec)
-            col = mix(col, rgb(54, 24, 14), self.cov(np.abs(top) - 0.08) * (side < 0))
-            outline = rgb(40, 16, 8)
+            col = mix(col, C["side2"] * 0.8, self.cov(np.abs(top) - 0.08) * (side < 0))
+            if bone is not None:
+                is_bone = (bone < 0) & (top >= 0) & (side >= 0)
+                bcol = mix(rgb(240, 230, 210), rgb(190, 176, 152), sat((ey + 0.3) / 0.9))
+                col = np.where(is_bone[..., None], bcol, col)
+            outline = C["outline"]
             if hunger:
                 col = mix(col, rgb(100, 150, 46), 0.5)
                 outline = rgb(20, 34, 8)
@@ -711,14 +785,43 @@ def write_previews(icons, hearts, xp, S, res, outdir, gui=4):
     bg.convert("RGB").save(os.path.join(outdir, f"icons-sheet-{res}x.png"))
 
 
+def write_steak_sheet(outdir):
+    """Comparison sheet of every steak variant, big and at HUD size."""
+    from PIL import ImageDraw, ImageFont
+    R = Renderer(32)
+    names = list(STEAK_VARIANTS)
+    cw, ch, cols = 360, 420, 5
+    rows = (len(names) + cols - 1) // cols
+    img = Image.new("RGBA", (cw * cols, ch * rows), (88, 120, 60, 255))
+    dr = ImageDraw.Draw(img)
+    font = ImageFont.load_default(size=26)
+    for i, n in enumerate(names):
+        x, y = (i % cols) * cw, (i // cols) * ch
+        big = Image.fromarray(R.steak("full", variant=n))
+        img.alpha_composite(big, (x + 36, y + 50))
+        dr.text((x + 20, y + 12), f"{i + 1}. {n}", font=font, fill=(255, 255, 255))
+        sm = big.resize((36, 36), Image.LANCZOS)
+        hf = Image.fromarray(R.steak("half", variant=n)).resize((36, 36), Image.LANCZOS)
+        for j in range(8):
+            img.alpha_composite(sm if j else hf, (x + 30 + j * 36, y + 360))
+    os.makedirs(outdir, exist_ok=True)
+    img.convert("RGB").save(os.path.join(outdir, "steak-variants.png"))
+
+
 def main():
+    global STEAK_DEFAULT
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--res", type=int, nargs="*", default=[256, 512],
                     help="pack resolutions to build (multiples of 16)")
     ap.add_argument("--out", default="dist")
     ap.add_argument("--preview", action="store_true")
+    ap.add_argument("--steak", default=STEAK_DEFAULT, choices=list(STEAK_VARIANTS),
+                    help="which steak design to use for the hunger bar")
     a = ap.parse_args()
+    STEAK_DEFAULT = a.steak
+    if a.preview:
+        write_steak_sheet("previews")
     for res in a.res:
         build_pack(res, a.out, preview_dir="previews" if a.preview else None)
 

@@ -46,3 +46,12 @@ python3 generator/build.py --res 256          # just one size
 
 Colours live in the `PAL_*` palettes near the top of the script. Animation speed is set by
 `HEART_FRAMES` / `XP_FRAMES` and `*_DURATION` (in ticks per frame).
+
+### Steak designs
+
+There are 10 steak designs to choose from (see [`previews/steak-variants.png`](previews/steak-variants.png)):
+`classic`, `crosshatch`, `t-bone`, `ribeye-fat`, `charred`, `thick-cut`, `tomahawk`, `filet`, `rustic`, `glossy`.
+
+```bash
+python3 generator/build.py --steak tomahawk
+```
