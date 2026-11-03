@@ -484,7 +484,29 @@ const BORDERS = {
   soft: { outline: 0.3, outlineCol: "#3c1a0e", rough: [0.05, 3] }, slab: { thick: 1.15, rough: [0.1, 4] },
 };
 const clone = o => JSON.parse(JSON.stringify(o));
-const TEXTURES = Object.keys(DESIGNS);
+/* Realistic textures: bump-lit seared crust, browning, cooked fat marbling, scorched grill marks, juice. */
+const REAL = {
+  "real-seared":     { label: "Pan-seared", pebble: 1.0, golden: 0.7, marble: 0.35, char: 0.1, wet: 0.6 },
+  "real-grilled":    { label: "Grilled", pebble: 0.9, golden: 0.55, marble: 0.25, char: 0.15, wet: 0.5, grill: [-2.4, -0.8, 0.8, 2.4] },
+  "real-crosshatch": { label: "Grill crosshatch", pebble: 0.9, golden: 0.5, marble: 0.25, wet: 0.5, grill: [-2.4, -0.8, 0.8, 2.4], cross: true },
+  "real-ribeye":     { label: "Ribeye", pebble: 0.9, golden: 0.6, marble: 1.0, char: 0.1, wet: 0.7 },
+  "real-charcoal":   { label: "Charcoal", pebble: 1.2, golden: 0.3, marble: 0.2, char: 0.85, darker: 0.15, wet: 0.35, grill: [-1.6, 0, 1.6] },
+  "real-cast-iron":  { label: "Cast-iron", pebble: 1.3, golden: 0.2, darker: 0.3, marble: 0.15, wet: 1.0 },
+  "real-flank":      { label: "Flank", pebble: 0.6, grain: 1.0, golden: 0.5, marble: 0.05, wet: 0.4, grill: [-2, 0, 2], slant: -0.9 },
+  "real-wagyu":      { label: "Wagyu", pebble: 0.8, golden: 0.75, marble: 1.4, fine: true, wet: 0.7 },
+};
+{
+  const realBorder = { b: "thin", outline: 0.3, outlineCol: "#1a0a04", rough: [0.06, 4] };
+  const extra = { "real-ribeye": { p: 2.0, lump: [0.25, 2.2] }, "real-flank": { rx: 4.2, ry: 1.7, angle: -0.55 }, "real-wagyu": { p: 2.2 }, "real-cast-iron": { thick: 0.85 } };
+  const realDesigns = {};
+  for (const n of Object.keys(REAL)) realDesigns[n] = Object.assign({}, realBorder, extra[n] || {});
+  const cartoon = Object.assign({}, DESIGNS);
+  for (const k of Object.keys(DESIGNS)) delete DESIGNS[k];
+  Object.assign(DESIGNS, realDesigns, cartoon);
+}
+const REAL_TEXTURES = Object.keys(REAL);
+const TEXTURES = Object.keys(DESIGNS).filter(n => !REAL[n]);
+const texLabel = n => REAL[n] ? REAL[n].label : n;
 const BORDER_NAMES = { rough: "Rough", thick: "Thick line", thin: "Thin line", lumpy: "Lumpy", jagged: "Jagged", faceted: "Faceted",
   wavy: "Wavy", double: "Double line", soft: "Soft brown", slab: "Thick slab" };
 const SHAPE_BASE = { texture: "grill", border: "rough", rough: [0.13, 4], lump: [0.16, 1.6], wave: [0, 0], facets: 0, outline: 0.42,
@@ -638,6 +660,59 @@ function steakTexture(tex, X, Y, ex, ey, top, C, seed, ctx, cov) {
     if (ctx.cross) { const [b2, h2] = burns(cs, k, w, 1.25); b = Math.max(b, b2); h = Math.max(h, h2); }
     face = mixc(face, C.dark, h * halo * ctx.burnHalo); face = mixc(face, BLACK, b);
   };
+  const RT = REAL[tex];
+  if (RT) {
+    // real seared-beef browns, tinted by the chosen meat colour (default meat = no tint)
+    const tint = [C.base[0] / (112 / 255), C.base[1] / (54 / 255), C.base[2] / (36 / 255)];
+    const tc = c3 => [Math.min(1, c3[0] * tint[0]), Math.min(1, c3[1] * tint[1]), Math.min(1, c3[2] * tint[2])];
+    const crustDark = tc(rgb(46, 24, 13)), crust = tc(rgb(104, 58, 32)), golden = tc(rgb(164, 102, 56));
+    // surface height: pebbly crust, muscle grain, crackle
+    const hAt = (x, y, u, v) => {
+      let hh = RT.pebble * (0.6 * samp(T[1], x * 22, y * 22) + 0.4 * samp(T[3], x * 46 + 9, y * 46 + 4)) * 0.5;
+      if (RT.crack) { const vr = voronoi(u / 0.75, v / 0.75, seed + 11); hh -= RT.crack * 0.35 * sstep(0.06, 0, (vr[1] - vr[0]) * 0.75); }
+      return hh;
+    };
+    const e = 0.04, h0 = hAt(X, Y, ex, ey);
+    const gxh = (hAt(X + e, Y, ex + e * ctx.ca, ey - e * ctx.sa) - h0) / e;
+    const gyh = (hAt(X, Y + e, ex + e * ctx.sa, ey + e * ctx.ca) - h0) / e;
+    const bump = -(gxh * ctx.lc + gyh * ctx.ls);
+    // colour: browning, darker flecks, thicker crust toward the edge
+    const n1 = fbm(seed + 5, X * 2.2, Y * 2.2), n2 = samp(T[4], X * 9 + 3, Y * 9 + 7);
+    let c = mixc(crust, golden, sstep(-0.3, 0.9, n1) * RT.golden);
+    c = mixc(c, crustDark, sstep(0.2, 1.1, n2) * 0.55);
+    const grit = samp(T[3], X * 38 + 2, Y * 38 + 8);                    // fine caramelized grit
+    c = mixc(c, golden, sstep(0.9, 1.6, grit) * 0.5 * RT.golden);
+    c = mixc(c, crustDark, sstep(-0.9, -1.6, grit) * 0.5);
+    c = mixc(c, crustDark, sat(sstep(-1.3, -0.15, top) * 0.55 + (RT.darker || 0)));
+    if (RT.grain) {                        // long muscle fibres
+      const fib = Math.sin((ey + ex * 0.3) * 13 + 3.5 * fbm(seed + 2, X * 2.5, Y * 2.5));
+      c = mixc(c, crustDark, sstep(0.45, 0.95, fib) * 0.4 * RT.grain);
+      c = mixc(c, golden, sstep(-0.6, -0.95, fib) * 0.2 * RT.grain);
+    }
+    if (RT.marble) {                       // cooked intramuscular fat
+      const fq = RT.fine ? 1.8 : 1, m = Math.abs(fbm(seed + 7, ex * 4.2 * fq + 11, ey * 6.5 * fq + 5));
+      const vein = sstep(0.012 + 0.11 * RT.marble, 0.008, m) * (0.6 + 0.4 * sstep(-0.5, 0.5, samp(T[1], X * 3, Y * 3)));
+      c = mixc(c, tc(mixc(rgb(196, 140, 92), rgb(232, 196, 148), sat(0.5 + 0.3 * samp(T[0], X * 30, Y * 30)))), vein * 0.75);
+    }
+    if (RT.char) {
+      const cs = samp(T[5], X * 7 + 1, Y * 7 + 2) + 0.4 * samp(T[2], X * 20, Y * 20);
+      c = mixc(c, rgb(26, 15, 10), sstep(0.9 - RT.char * 0.6, 1.3 - RT.char * 0.6, cs) * 0.9);
+    }
+    if (RT.grill) {                        // scorched grill marks with soft brown edges
+      const k = RT.slant ?? 0.55;
+      let [bb, hh] = burns(RT.grill, k, 0.24);
+      if (RT.cross || ctx.cross) { const [b2, h2] = burns(RT.grill, k, 0.24, 1.25); bb = Math.max(bb, b2); hh = Math.max(hh, h2); }
+      const ragged = Math.max(0.55, Math.min(1, 0.85 + 0.2 * samp(T[2], X * 14, Y * 14)));               // marks pick up unevenly
+      c = mixc(c, scale3(crustDark, 0.9), sat(hh ** 4 * 0.75 * ctx.burnHalo));   // narrow scorch beside each mark
+      c = mixc(c, mixc(rgb(18, 10, 6), BLACK, 0.5), sat(bb * ragged));
+    }
+    // bump lighting + broad light falloff
+    c = scale3(c, Math.max(0.5, Math.min(1.6, 1 + bump * 0.75)) * (1.1 - 0.2 * ctx.shade * sat((ctx.lp + 1.6) / 3.2)));
+    // glistening juices
+    const wet = sstep(0, 0.8, samp(T[0], X * 5 + 13, Y * 5 + 2)) * RT.wet;
+    c = mixc(c, rgb(255, 240, 228), sat(Math.pow(sat(bump * 1.2), 3) * wet * 0.9));
+    return mixc(plain, c, ctx.strength);
+  }
   switch (tex) {
     case "grill": grill([-2.1, 0, 2.1], 0.55, 0.21); break;
     case "crosshatch": { const c4 = [-2.4, -0.8, 0.8, 2.4]; const [b1, h1] = burns(c4, 1.0, 0.13), [b2, h2] = burns(c4, -2.2, 0.13);
@@ -683,8 +758,9 @@ function steakIcon(S, st, kind = "full", flash = false, hunger = false, shOverri
   const top = steakGrids(S, sh, 0, seed), side = steakGrids(S, sh, sh.thick, seed);
   const W = 9 * S, H = 9 * S, img = newImg(S, 9, 9), ow = sh.outline;
   const r = mulberry32(seed + 77), ctx = { specks: [], drops: [], burnW: sh.burnW, burnAng: sh.burnAng, burnCol: unhex(st.steakCol.burn), strength: sh.texStrength,
-    burnCount: sh.burnCount, burnSpacing: sh.burnSpacing, burnOffset: sh.burnOffset, burnHalo: sh.burnHalo, cross: sh.cross, shade: sh.shade, lp: 0 };
-  const lc = Math.cos(sh.light * Math.PI / 180), ls = Math.sin(sh.light * Math.PI / 180);
+    burnCount: sh.burnCount, burnSpacing: sh.burnSpacing, burnOffset: sh.burnOffset, burnHalo: sh.burnHalo, cross: sh.cross, shade: sh.shade, lp: 0,
+    ca: Math.cos(sh.angle), sa: Math.sin(sh.angle), lc: Math.cos(sh.light * Math.PI / 180), ls: Math.sin(sh.light * Math.PI / 180) };
+  const lc = ctx.lc, ls = ctx.ls;
   const lcx = 4.5 + sh.posX, lcy = 4.2 + sh.posY;
   for (let i = 0; i < 70; i++) ctx.specks.push({ x: -3.8 + r() * 7.6, y: -2.2 + r() * 4.4, r: 0.09 + r() * 0.19, c: [C.dark, C.light, scale3(C.dark, 0.85)][i % 3] });
   for (let i = 0; i < 14; i++) ctx.drops.push({ x: -3.3 + r() * 6.6, y: -1.6 + r() * 3.2 });
@@ -801,7 +877,7 @@ const AN = (path, label) => ({ type: "angle", path, label, min: 0, max: 360, ste
 const SECTIONS = [
   { id: "steak-design", title: "Steak: start from a design", cls: "meat", chips: "designs",
     hint: "A design sets the texture, border and shape together. Change any part of it in the cards below.", groups: [] },
-  { id: "steak-texture", title: "Steak texture", cls: "meat", chips: "textures", groups: [
+  { id: "steak-texture", title: "Steak texture", cls: "meat", chips: [["texturesReal", "Realistic"], ["textures", "Cartoon"]], groups: [
     { controls: [R("shape.texStrength", "Texture strength", 0, 1, 0.01), R("shape.texScale", "Texture size", 0.3, 3, 0.01)] },
     { label: "Burn lines (grill textures)", controls: [R("shape.burnCount", "Number of lines", 0, 10, 1), R("shape.burnSpacing", "Spacing", 0.3, 2.5, 0.01),
       R("shape.burnW", "Width", 0.2, 3, 0.01), D("shape.burnAng", "Angle", -1.57, 1.57, 0.01), R("shape.burnOffset", "Slide", -3, 3, 0.01),
@@ -969,7 +1045,13 @@ for (const sec of SECTIONS) {
   const dot = document.createElement("span"); dot.className = "dot" + (sec.cls ? " " + sec.cls : ""); h.append(dot, sec.title); card.appendChild(h);
   if (sec.hint) { const p = document.createElement("p"); p.className = "hint"; p.textContent = sec.hint; card.appendChild(p); }
   if (sec.editor) card.appendChild(makeEditor());
-  if (sec.chips) { const d = document.createElement("div"); d.className = "designs"; d.id = "chips-" + sec.chips; d.setAttribute("role", "group"); d.setAttribute("aria-label", sec.title); card.appendChild(d); }
+  if (sec.chips) {
+    const sets = Array.isArray(sec.chips) ? sec.chips : [[sec.chips, null]];
+    for (const [set, label] of sets) {
+      if (label) { const l = document.createElement("p"); l.className = "group-label"; l.textContent = label; card.appendChild(l); }
+      const d = document.createElement("div"); d.className = "designs"; d.id = "chips-" + set; d.setAttribute("role", "group"); d.setAttribute("aria-label", label ? sec.title + ": " + label : sec.title); card.appendChild(d);
+    }
+  }
   for (const g of sec.groups) {
     if (g.label) { const l = document.createElement("p"); l.className = "group-label"; l.textContent = g.label; card.appendChild(l); }
     const colorsBox = document.createElement("div"); colorsBox.className = "colors";
@@ -1020,15 +1102,17 @@ function syncInputs() {
     else { inp.value = ctl.type === "speed" ? 5 - v : v; $(idOf(ctl.path) + "-o").textContent = fmt(ctl, v); }
   }
   for (const b of $("chips-designs").children) b.setAttribute("aria-pressed", String(b.dataset.name === st.design));
-  for (const b of $("chips-textures").children) b.setAttribute("aria-pressed", String(b.dataset.name === st.shape.texture));
+  for (const id of ["chips-textures", "chips-texturesReal"]) for (const b of $(id).children) b.setAttribute("aria-pressed", String(b.dataset.name === st.shape.texture));
   for (const b of $("chips-borders").children) b.setAttribute("aria-pressed", String(b.dataset.name === st.shape.border));
   $("r256").setAttribute("aria-pressed", String(st.res === 256)); $("r512").setAttribute("aria-pressed", String(st.res === 512));
 }
 
 /* steak chips: designs, textures and borders, each drawn with the current steak */
 const chipSets = {
-  designs: { names: Object.keys(DESIGNS), label: n => n, shape: n => designShape(n),
+  designs: { names: Object.keys(DESIGNS), label: texLabel, shape: n => designShape(n),
     pick: n => { st.design = n; st.shape = designShape(n); } },
+  texturesReal: { names: REAL_TEXTURES, label: texLabel, shape: n => Object.assign(clone(st.shape), { texture: n }),
+    pick: n => { st.shape.texture = n; } },
   textures: { names: TEXTURES, label: n => n, shape: n => Object.assign(clone(st.shape), { texture: n }),
     pick: n => { st.shape.texture = n; } },
   borders: { names: Object.keys(BORDERS), label: n => BORDER_NAMES[n], shape: n => Object.assign(clone(st.shape), borderPreset(n)),
