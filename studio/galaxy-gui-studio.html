@@ -1,0 +1,958 @@
+<title>Galaxy GUI Studio</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito+Sans:opsz,wght@6..12,400;6..12,600;6..12,700&family=JetBrains+Mono:wght@500&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+/* Layout: two-column studio — sticky live HUD preview on the left, one card of controls per HUD element on the right; stacks on phones. */
+:root {
+  --bg: #0c0a18;
+  --panel: #16132a;
+  --panel-2: #1d1936;
+  --line: #2c2650;
+  --fg: #eeeaff;
+  --muted: #a39cc9;
+  --accent: #c48cff;
+  --accent-ink: #1a0f2e;
+  --meat: #c06a43;
+  --xp: #5fd8ff;
+  --good: #7fe0b0;
+  --bad: #ff8a8a;
+  --font-display: "Fredoka", "Trebuchet MS", system-ui, sans-serif;
+  --font-body: "Nunito Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 24px 48px;
+}
+.wrap { max-width: 1280px; margin: 0 auto; display: grid; gap: 20px; }
+header { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px; }
+h1 { font-family: var(--font-display); font-weight: 700; font-size: clamp(28px, 4vw, 40px); margin: 0; letter-spacing: 0.01em; text-wrap: balance; }
+h1 span { color: var(--accent); }
+.sub { color: var(--muted); margin: 4px 0 0; max-width: 64ch; }
+.tag { font-family: var(--font-mono); font-size: 12px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 4px 10px; white-space: nowrap; }
+
+.studio { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; }
+@media (min-width: 1000px) {
+  .studio { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); align-items: start; }
+  .preview-col { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 16px); }
+}
+.controls-col { display: grid; gap: 16px; min-width: 0; }
+
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 18px; display: grid; gap: 14px; min-width: 0; }
+.card h2 { font-family: var(--font-display); font-weight: 600; font-size: 20px; margin: 0; display: flex; align-items: center; gap: 10px; }
+.dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); flex: none; }
+.dot.meat { background: var(--meat); }
+.dot.xp { background: var(--xp); }
+.hint { color: var(--muted); font-size: 13px; margin: 0; }
+.group-label { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 2px 0 -6px; font-weight: 700; }
+
+.hud-frame { border-radius: 12px; overflow: hidden; border: 1px solid var(--line); background: #4f6b35; }
+canvas.fit { display: block; width: 100%; height: auto; }
+.closeups { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.closeup { background: var(--panel-2); border: 1px solid var(--line); border-radius: 12px; padding: 10px; display: grid; justify-items: center; gap: 6px; min-width: 0; }
+.closeup canvas { width: 100%; max-width: 180px; height: auto; aspect-ratio: 1; }
+.closeup.wide { grid-column: 1 / -1; }
+.closeup.wide canvas { max-width: 100%; aspect-ratio: auto; }
+.lbl { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+
+.designs { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 8px; }
+.design { appearance: none; border: 1px solid var(--line); background: var(--panel-2); color: var(--fg); border-radius: 10px; padding: 6px 4px 8px; display: grid; justify-items: center; gap: 2px; cursor: pointer; font: inherit; font-size: 12px; line-height: 1.2; }
+.design canvas { width: 56px; height: 56px; }
+.design:hover { border-color: var(--muted); }
+.design[aria-pressed="true"] { border-color: var(--meat); box-shadow: inset 0 0 0 1px var(--meat); background: #2a1c22; }
+.design:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.sliders { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px 18px; }
+.field { display: grid; gap: 4px; min-width: 0; }
+.field label { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; font-weight: 600; }
+.field output { font-family: var(--font-mono); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+input[type="range"] { width: 100%; accent-color: var(--accent); }
+.card.meat input[type="range"] { accent-color: var(--meat); }
+.card.xp input[type="range"] { accent-color: var(--xp); }
+.colors { display: flex; flex-wrap: wrap; gap: 12px; }
+.swatch { display: grid; gap: 4px; justify-items: start; font-size: 13px; font-weight: 600; }
+.swatch input[type="color"] { width: 64px; height: 36px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2); padding: 2px; cursor: pointer; }
+
+.export-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.seg button { appearance: none; border: 0; background: transparent; color: var(--fg); padding: 8px 14px; font: inherit; font-weight: 600; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+.btn { appearance: none; border: 1px solid var(--line); background: var(--panel-2); color: var(--fg); border-radius: 10px; padding: 9px 14px; font: inherit; font-weight: 600; cursor: pointer; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn:disabled { opacity: 0.5; cursor: progress; }
+.progress { height: 8px; border-radius: 999px; background: var(--panel-2); border: 1px solid var(--line); overflow: hidden; }
+.progress > div { height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent), var(--xp)); transition: width 0.2s; }
+.status { font-size: 13px; color: var(--muted); min-height: 1.5em; margin: 0; }
+.status.ok { color: var(--good); }
+.status.err { color: var(--bad); }
+.notes { font-size: 13px; color: var(--muted); margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+code { font-family: var(--font-mono); font-size: 0.9em; }
+@media (max-width: 520px) { .closeups { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (prefers-reduced-motion: reduce) { .progress > div { transition: none; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Galaxy GUI <span>Studio</span></h1>
+      <p class="sub">Edit every part of your 1.8.9 HUD pack: hearts, steak hunger bar, armor, XP bar, boss and jump bars, air bubbles and crosshair. The preview updates live, and the pack builds right here in your browser.</p>
+    </div>
+    <span class="tag">Minecraft 1.8.9 · pack_format 1</span>
+  </header>
+
+  <div class="studio">
+    <section class="preview-col card" aria-label="Preview">
+      <h2><span class="dot"></span>Live HUD</h2>
+      <div class="hud-frame"><canvas id="hud" class="fit" width="1600" height="560" aria-label="Animated preview of the whole HUD"></canvas></div>
+      <div class="closeups">
+        <div class="closeup"><canvas id="bigHeart" width="360" height="360" aria-label="Heart close-up"></canvas><span class="lbl">Heart</span></div>
+        <div class="closeup"><canvas id="bigSteak" width="360" height="360" aria-label="Steak close-up"></canvas><span class="lbl">Steak</span></div>
+        <div class="closeup"><canvas id="bigArmor" width="360" height="360" aria-label="Armor close-up"></canvas><span class="lbl">Armor</span></div>
+        <div class="closeup wide"><canvas id="states" width="1008" height="196" aria-label="Poison, wither, absorption and damaged hearts, hunger-effect steak, air bubble and horse jump bar"></canvas><span class="lbl">Poison · wither · absorption · damaged · hunger effect · air · jump bar</span></div>
+      </div>
+      <p class="hint">Previewed at GUI scale 4. In game the hearts and XP bar animate with OptiFine (Custom Animations on).</p>
+    </section>
+
+    <div class="controls-col" id="controls">
+      <section class="card" aria-labelledby="h-export" id="export-card">
+        <h2 id="h-export"><span class="dot"></span>Build the pack</h2>
+        <div class="export-row">
+          <div class="seg" role="group" aria-label="Resolution">
+            <button type="button" id="r256" aria-pressed="true">256x</button>
+            <button type="button" id="r512" aria-pressed="false">512x</button>
+          </div>
+          <button type="button" class="btn primary" id="build">Build &amp; download .zip</button>
+          <button type="button" class="btn" id="copy">Copy settings</button>
+          <button type="button" class="btn" id="reset">Reset all</button>
+        </div>
+        <div class="progress" aria-hidden="true"><div id="bar"></div></div>
+        <p class="status" id="status" role="status"></p>
+        <ul class="notes">
+          <li>512x builds an 8192 × 8192 icons file. It takes longer and needs a desktop browser.</li>
+          <li>Install: put the zip in <code>.minecraft/resourcepacks/</code> without unzipping it.</li>
+          <li>Your edits are remembered in this browser. Use Copy settings to send them to Claude.</li>
+        </ul>
+      </section>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* =====================================================================
+   Math + noise
+   ===================================================================== */
+const TAU = Math.PI * 2;
+const sat = x => x < 0 ? 0 : x > 1 ? 1 : x;
+const sstep = (a, b, x) => { const t = sat((x - a) / (b - a)); return t * t * (3 - 2 * t); };
+const lerp = (a, b, t) => a + (b - a) * t;
+const mixc = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+const rgb = (r, g, b) => [r / 255, g / 255, b / 255];
+const scale3 = (c, k) => [c[0] * k, c[1] * k, c[2] * k];
+const WHITE = [1, 1, 1];
+const fract = x => x - Math.floor(x);
+
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+
+const NN = 256;
+function makeNoise(seed) {
+  // periodic gradient-noise octaves with a 1/f^1.3 amplitude falloff (tiles every 256 texels)
+  const out = new Float32Array(NN * NN);
+  const rnd = mulberry32(seed * 7919 + 13);
+  for (const cells of [2, 4, 8, 16, 32, 64]) {
+    const gx = new Float32Array(cells * cells), gy = new Float32Array(cells * cells);
+    for (let i = 0; i < cells * cells; i++) { const a = rnd() * TAU; gx[i] = Math.cos(a); gy[i] = Math.sin(a); }
+    const amp = Math.pow(cells, -1.3), cs = NN / cells;
+    for (let y = 0; y < NN; y++) {
+      const fy = y / cs, y0 = Math.floor(fy), ty = fy - y0, y1 = (y0 + 1) % cells;
+      const sy = ty * ty * ty * (ty * (ty * 6 - 15) + 10);
+      for (let x = 0; x < NN; x++) {
+        const fx = x / cs, x0 = Math.floor(fx), tx = fx - x0, x1 = (x0 + 1) % cells;
+        const sx = tx * tx * tx * (tx * (tx * 6 - 15) + 10);
+        const i00 = y0 * cells + x0, i10 = y0 * cells + x1, i01 = y1 * cells + x0, i11 = y1 * cells + x1;
+        const n00 = gx[i00] * tx + gy[i00] * ty, n10 = gx[i10] * (tx - 1) + gy[i10] * ty;
+        const n01 = gx[i01] * tx + gy[i01] * (ty - 1), n11 = gx[i11] * (tx - 1) + gy[i11] * (ty - 1);
+        out[y * NN + x] += amp * lerp(lerp(n00, n10, sx), lerp(n01, n11, sx), sy);
+      }
+    }
+  }
+  let m = 0; for (let i = 0; i < out.length; i++) m += out[i]; m /= out.length;
+  let v = 0; for (let i = 0; i < out.length; i++) { out[i] -= m; v += out[i] * out[i]; }
+  const sd = Math.sqrt(v / out.length); for (let i = 0; i < out.length; i++) out[i] /= sd;
+  return out;
+}
+const T = [0, 1, 2, 3, 4, 5].map(makeNoise);
+
+function samp(t, u, v) {
+  u = u % NN; if (u < 0) u += NN; v = v % NN; if (v < 0) v += NN;
+  let x0 = Math.floor(u), y0 = Math.floor(v); const fx = u - x0, fy = v - y0;
+  x0 &= 255; y0 &= 255; const x1 = (x0 + 1) & 255, y1 = (y0 + 1) & 255;
+  const a = t[y0 * NN + x0], b = t[y0 * NN + x1], c = t[y1 * NN + x0], d = t[y1 * NN + x1];
+  return (a + (b - a) * fx) * (1 - fy) + (c + (d - c) * fx) * fy;
+}
+function fbm(k, u, v) {
+  return (samp(T[k % 6], u, v) + 0.5 * samp(T[(k + 3) % 6], u * 2 + 17, v * 2 + 31)
+    + 0.25 * samp(T[(k + 1) % 6], u * 4 + 5, v * 4 + 77)) / 1.146;
+}
+
+/* =====================================================================
+   Signed distance functions (units: vanilla 16x pixels)
+   ===================================================================== */
+function sdHeart(X, Y) {
+  const K = 7.0; let px = Math.abs((X - 4.5) / K); const py = (8.35 - Y) / K;
+  let d;
+  if (py + px > 1) d = Math.hypot(px - 0.25, py - 0.75) - Math.SQRT2 / 4;
+  else { const t = 0.5 * Math.max(px + py, 0); d = Math.sqrt(Math.min(px * px + (py - 1) ** 2, (px - t) ** 2 + (py - t) ** 2)) * Math.sign(px - py); }
+  return d * K;
+}
+function sdEllipse(X, Y, cx, cy, rx, ry, ang) {
+  const dx = X - cx, dy = Y - cy, c = Math.cos(ang), s = Math.sin(ang);
+  const ex = dx * c + dy * s, ey = -dx * s + dy * c;
+  const k = Math.hypot(ex / rx, ey / ry), g = Math.hypot(ex / (rx * rx), ey / (ry * ry));
+  return (k - 1) * k / Math.max(g, 1e-6);
+}
+function sdBox(X, Y, cx, cy, hx, hy, r = 0) {
+  const qx = Math.abs(X - cx) - hx + r, qy = Math.abs(Y - cy) - hy + r;
+  return Math.hypot(Math.max(qx, 0), Math.max(qy, 0)) + Math.min(Math.max(qx, qy), 0) - r;
+}
+function sdPolygon(X, Y, pts) {
+  let d = (X - pts[0][0]) ** 2 + (Y - pts[0][1]) ** 2, s = 1;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i, i++) {
+    const ex = pts[j][0] - pts[i][0], ey = pts[j][1] - pts[i][1], wx = X - pts[i][0], wy = Y - pts[i][1];
+    const t = sat((wx * ex + wy * ey) / (ex * ex + ey * ey)), bx = wx - ex * t, by = wy - ey * t;
+    d = Math.min(d, bx * bx + by * by);
+    const c1 = Y >= pts[i][1], c2 = Y < pts[j][1], c3 = ex * wy > ey * wx;
+    if ((c1 && c2 && c3) || (!c1 && !c2 && !c3)) s = -s;
+  }
+  return s * Math.sqrt(d);
+}
+const ARMOR_PTS = [[1.1, 1.3], [3.2, 0.8], [4.5, 2.1], [5.8, 0.8], [7.9, 1.3], [8.5, 4.1], [6.9, 4.4], [6.9, 8.3], [2.1, 8.3], [2.1, 4.4], [0.5, 4.1]];
+
+/* =====================================================================
+   Image buffers
+   ===================================================================== */
+function newImg(S, w, h) { const W = Math.round(w * S), H = Math.round(h * S); return { S, W, H, col: new Float32Array(W * H * 3), a: new Float32Array(W * H) }; }
+function toRGBA(img) {
+  const out = new Uint8ClampedArray(img.W * img.H * 4);
+  for (let i = 0, n = img.W * img.H; i < n; i++) {
+    const a = img.a[i]; if (a <= 0) continue;
+    out[i * 4] = img.col[i * 3] * 255 + 0.5; out[i * 4 + 1] = img.col[i * 3 + 1] * 255 + 0.5;
+    out[i * 4 + 2] = img.col[i * 3 + 2] * 255 + 0.5; out[i * 4 + 3] = sat(a) * 255 + 0.5;
+  }
+  return { w: img.W, h: img.H, data: out };
+}
+
+/* =====================================================================
+   Stars + starfield (loops seamlessly: drifts whole periods per cycle)
+   ===================================================================== */
+function makeStars(seed, n, w, h, nBig, twinkle = true) {
+  const r = mulberry32(seed * 104729 + 7), out = [];
+  for (let i = 0; i < n + nBig; i++) {
+    const big = i >= n;
+    out.push({ x: r() * w, y: r() * h, b: big ? 0.75 + r() * 0.25 : 0.3 + r() * 0.65,
+      size: big ? 0.13 + r() * 0.04 : 0.07 + r() * 0.04, k: twinkle ? 1 + Math.floor(r() * 3) : 0, ph: r(), glint: big });
+  }
+  return out;
+}
+function addStars(buf, S, W, H, stars, t, tint, period, shift) {
+  const wB = W / S, hB = H / S;
+  for (const st of stars) {
+    const tw = st.k ? 0.5 + 0.5 * Math.sin(TAU * (st.k * t + st.ph)) : 1;
+    const amp = st.b * (0.35 + 0.65 * tw), reach = st.glint ? 1.1 : st.size * 4;
+    let xs = [st.x], ys = [st.y];
+    if (period) {
+      const bx = ((st.x + shift[0]) % period[0] + period[0]) % period[0], by = ((st.y + shift[1]) % period[1] + period[1]) % period[1];
+      xs = []; ys = [];
+      for (let i = -1; i <= Math.floor(wB / period[0]) + 1; i++) xs.push(bx + i * period[0]);
+      for (let j = -1; j <= Math.floor(hB / period[1]) + 1; j++) ys.push(by + j * period[1]);
+    }
+    const s2 = 2 * st.size * st.size;
+    for (const cy of ys) {
+      if (cy + reach < 0 || cy - reach > hB) continue;
+      for (const cx of xs) {
+        if (cx + reach < 0 || cx - reach > wB) continue;
+        const i0 = Math.max(0, Math.floor((cx - reach) * S)), i1 = Math.min(W, Math.ceil((cx + reach) * S));
+        const j0 = Math.max(0, Math.floor((cy - reach) * S)), j1 = Math.min(H, Math.ceil((cy + reach) * S));
+        for (let j = j0; j < j1; j++) {
+          const dy = (j + 0.5) / S - cy;
+          for (let i = i0; i < i1; i++) {
+            const dx = (i + 0.5) / S - cx;
+            let g = Math.exp(-(dx * dx + dy * dy) / s2) * 1.6;
+            if (st.glint) g += 0.8 * tw * (Math.exp(-Math.abs(dx) / 0.05) * Math.exp(-((dy / 0.75) ** 2)) + Math.exp(-Math.abs(dy) / 0.05) * Math.exp(-((dx / 0.75) ** 2)));
+            const p = (j * W + i) * 3, v = amp * g;
+            buf[p] += v * tint[0]; buf[p + 1] += v * tint[1]; buf[p + 2] += v * tint[2];
+          }
+        }
+      }
+    }
+  }
+}
+function starfield(S, w, h, t, P, o = {}) {
+  const seed = o.seed || 0, sx = (o.scale || [12, 12])[0], sy = (o.scale || [12, 12])[1];
+  const drift = o.drift || [1, 1], dens = o.dens ?? 0.09, bigD = o.big ?? 0.012, starMul = P.starMul ?? 1;
+  const W = Math.round(w * S), H = Math.round(h * S), buf = new Float32Array(W * H * 3);
+  const perx = NN / sx, pery = NN / sy, ox = perx * drift[0] * t, oy = pery * drift[1] * t;
+  const t2 = T[(seed + 2) % 6], t4 = T[(seed + 4) % 6];
+  for (let j = 0; j < H; j++) {
+    const v = ((j + 0.5) / S - oy) * sy;
+    for (let i = 0; i < W; i++) {
+      const u = ((i + 0.5) / S - ox) * sx;
+      const n1 = fbm(seed, u, v), n2 = samp(t2, u + 90, v + 40), n3 = samp(t4, u + 30, v + 150);
+      const d = sstep(-1.5, 1.6, n1);
+      let c = mixc(P.dark, P.deep, sstep(0.2, 0.6, d));
+      c = mixc(c, mixc(P.cloud, P.cloud2, sat(0.5 + 0.5 * n2)), sstep(0.55, 0.9, d) * 0.9);
+      c = mixc(c, P.bright, sstep(0.86, 1.05, d) * 0.6);
+      c = mixc(c, P.tint, sat(n3 - 0.4) * 0.45 * sstep(0.35, 0.7, d));
+      const p = (j * W + i) * 3; buf[p] = c[0]; buf[p + 1] = c[1]; buf[p + 2] = c[2];
+    }
+  }
+  const nS = Math.floor(perx * pery * dens * starMul), nB = starMul > 0 ? Math.max(1, Math.floor(perx * pery * bigD * starMul)) : 0;
+  addStars(buf, S, W, H, makeStars(seed + 101, nS, perx, pery, nB), t, P.star, [perx, pery], [ox, oy]);
+  return buf;
+}
+
+/* =====================================================================
+   Palettes (every galaxy surface is built from three picked colours)
+   ===================================================================== */
+const hex = c => "#" + c.map(v => Math.round(sat(v) * 255).toString(16).padStart(2, "0")).join("");
+const unhex = h => [parseInt(h.slice(1, 3), 16) / 255, parseInt(h.slice(3, 5), 16) / 255, parseInt(h.slice(5, 7), 16) / 255];
+function galPal(c, extra = {}) {
+  c = Object.assign({}, c, extra);
+  const deep = unhex(c.deep), cloud = unhex(c.cloud), bright = unhex(c.bright);
+  return {
+    dark: scale3(deep, 0.23), deep, cloud, bright,
+    cloud2: [cloud[0] * 0.63, Math.min(1, cloud[1] * 1.15), Math.min(1, cloud[2] * 1.02)],
+    tint: [Math.min(1, cloud[0] * 1.5), cloud[1] * 0.5, cloud[2] * 0.6],
+    outline: c.outlineCol ? unhex(c.outlineCol) : scale3(deep, 0.42),
+    star: WHITE, starMul: c.stars ?? 1, ow: c.outline ?? 0.5, shine: c.shine ?? 0.28,
+  };
+}
+
+/* =====================================================================
+   Icons
+   ===================================================================== */
+const covf = S => d => sat(0.5 - d * S);
+const setPx = (img, p, a, c) => { img.a[p] = a; img.col[p * 3] = sat(c[0]); img.col[p * 3 + 1] = sat(c[1]); img.col[p * 3 + 2] = sat(c[2]); };
+function galaxyFill(field, p, d, ow, P) {
+  const inner = Math.max(-d - ow, 0), k = 0.7 + 0.3 * sstep(0, 1.5, inner), r = Math.exp(-inner / 0.3) * 0.32;
+  return [field[p * 3] * k + P.cloud[0] * r, field[p * 3 + 1] * k + P.cloud[1] * r, field[p * 3 + 2] * k + P.cloud[2] * r];
+}
+
+function heartIcon(S, t, P, kind = "full", flash = false, seed = 0) {
+  const img = newImg(S, 9, 9), cov = covf(S), ow = P.ow;
+  const field = starfield(S, 9, 9, kind === "container" ? 0 : t, P, { seed });
+  for (let j = 0; j < img.H; j++) for (let i = 0; i < img.W; i++) {
+    const X = (i + 0.5) / S, Y = (j + 0.5) / S, d = sdHeart(X, Y), p = j * img.W + i;
+    let a = cov(d); if (a <= 0) continue;
+    let c;
+    if (kind === "container") {
+      const g = [field[p * 3] * 0.22 + 10 / 255, field[p * 3 + 1] * 0.22 + 6 / 255, field[p * 3 + 2] * 0.22 + 18 / 255];
+      c = mixc(flash ? rgb(250, 244, 255) : rgb(4, 2, 8), g, cov(d + ow));
+    } else {
+      let g = galaxyFill(field, p, d, ow, P);
+      g = mixc(g, WHITE, sat(-sdEllipse(X, Y, 2.6, 2.75, 0.9, 0.42, -0.7) / 0.5) * P.shine);
+      let out = P.outline;
+      if (flash) { g = mixc(g, WHITE, 0.4); out = rgb(250, 244, 255); }
+      c = mixc(out, g, cov(d + ow));
+      if (kind === "half") a *= cov(X - 4.5);
+    }
+    setPx(img, p, a, c);
+  }
+  return toRGBA(img);
+}
+
+function armorIcon(S, kind, P, emptyCol) {
+  const img = newImg(S, 9, 9), cov = covf(S), ow = P.ow;
+  const field = kind === "empty" ? null : starfield(S, 9, 9, 0, P, { seed: 1 });
+  const ec = unhex(emptyCol);
+  for (let j = 0; j < img.H; j++) for (let i = 0; i < img.W; i++) {
+    const X = (i + 0.5) / S, Y = (j + 0.5) / S, d = sdPolygon(X, Y, ARMOR_PTS) - 0.15, p = j * img.W + i;
+    let a = cov(d); if (a <= 0) continue;
+    let c;
+    if (!field) c = mixc(scale3(ec, 0.25), ec, cov(d + ow));
+    else {
+      c = mixc(P.outline, galaxyFill(field, p, d, ow, P), cov(d + ow));
+      if (kind === "half") a *= cov(X - 4.5);
+    }
+    setPx(img, p, a, c);
+  }
+  return toRGBA(img);
+}
+
+function bubbleIcon(S, popping, col) {
+  const img = newImg(S, 9, 9), cov = covf(S), r = popping ? 3.6 : 3.3, base = unhex(col), ringC = mixc(base, WHITE, 0.6);
+  for (let j = 0; j < img.H; j++) for (let i = 0; i < img.W; i++) {
+    const X = (i + 0.5) / S, Y = (j + 0.5) / S, d = Math.hypot(X - 4.5, Y - 4.5) - r, p = j * img.W + i;
+    let ring = cov(Math.abs(d) - 0.4), inside = cov(d);
+    if (popping) { ring *= sstep(-0.2, 0.25, Math.cos(Math.atan2(Y - 4.5, X - 4.5) * 4 + 0.5)); inside = 0; }
+    const h = popping ? 0 : sat(-sdEllipse(X, Y, 3.2, 3.1, 0.8, 0.45, -0.7) / 0.3);
+    let c = mixc(base, ringC, ring); c = mixc(c, WHITE, h);
+    const a = Math.max(ring, inside * 0.35, h * 0.9); if (a <= 0) continue;
+    setPx(img, p, a, c);
+  }
+  return toRGBA(img);
+}
+
+function barIcon(S, t, P, kind, cfg, seed = 5, flow = true) {
+  const img = newImg(S, 182, 5), cov = covf(S), round = Math.min(cfg.round, 2.5), ow = cfg.outline, bg = unhex(cfg.bgCol);
+  const field = kind === "bg" ? starfield(S, 182, 5, 0, P, { seed: seed + 3, scale: [4, 12] })
+    : starfield(S, 182, 5, t, P, { seed, scale: [2.8125, 12], drift: [flow ? 1 : 0, 0], dens: 0.05, big: 0.004 });
+  for (let j = 0; j < img.H; j++) for (let i = 0; i < img.W; i++) {
+    const X = (i + 0.5) / S, Y = (j + 0.5) / S, d = sdBox(X, Y, 91, 2.5, 91, 2.5, round), p = j * img.W + i;
+    const a = cov(d); if (a <= 0) continue;
+    let c;
+    if (kind === "bg") {
+      const k = 1 - 0.35 * sat((2.6 - Y) / 2);
+      const g = [(field[p * 3] * 0.2 + bg[0]) * k, (field[p * 3 + 1] * 0.2 + bg[1]) * k, (field[p * 3 + 2] * 0.2 + bg[2]) * k];
+      c = mixc(scale3(bg, 0.25), g, cov(d + ow));
+    } else {
+      let g = galaxyFill(field, p, d, ow, P);
+      g = mixc(g, WHITE, 0.06 * Math.exp(-(((Y - 1.25) / 0.4) ** 2)));
+      c = mixc(P.outline, g, cov(d + ow));
+    }
+    setPx(img, p, a, c);
+  }
+  return toRGBA(img);
+}
+
+function crosshairIcon(S, cfg) {
+  const img = newImg(S, 16, 16), cov = covf(S), col = unhex(cfg.col), h = cfg.thick / 2, L = cfg.len;
+  for (let j = 0; j < img.H; j++) for (let i = 0; i < img.W; i++) {
+    const X = (i + 0.5) / S, Y = (j + 0.5) / S, p = j * img.W + i;
+    const a = cov(Math.min(sdBox(X, Y, 7.5, 7.5, h, L), sdBox(X, Y, 7.5, 7.5, L, h)));
+    if (a > 0) setPx(img, p, a, col);
+  }
+  return toRGBA(img);
+}
+
+function pingIcon(S, level) {
+  const img = newImg(S, 10, 8), cov = covf(S), active = level < 5 ? 5 - level : 0;
+  for (let j = 0; j < img.H; j++) for (let i = 0; i < img.W; i++) {
+    const X = (i + 0.5) / S, Y = (j + 0.5) / S, p = j * img.W + i;
+    let c = [0, 0, 0], a = 0;
+    for (let b = 0; b < 5; b++) {
+      const h = 2 + b * 1.5, m = cov(sdBox(X, Y, 0.9 + b * 2, 8 - h / 2, 0.75, h / 2, 0.25));
+      const cc = level === 5 ? rgb(150, 30, 50) : b < active ? mixc(rgb(70, 230, 220), rgb(170, 120, 255), b / 4) : rgb(46, 40, 66);
+      c = mixc(c, cc, m); a = Math.max(a, m);
+    }
+    if (level === 5) {
+      let d = Math.min(Math.abs((X - 5) - (Y - 4)), Math.abs((X - 5) + (Y - 4))) - 0.5;
+      d = Math.max(d, Math.max(Math.abs(X - 5), Math.abs(Y - 4)) - 2.6);
+      const m = cov(d); c = mixc(c, rgb(255, 80, 100), m); a = Math.max(a, m);
+    }
+    if (a > 0) setPx(img, p, a, c);
+  }
+  return toRGBA(img);
+}
+
+/* =====================================================================
+   Steak
+   ===================================================================== */
+const DESIGNS = {
+  "grill": { b: "rough", lump: [0, 1.6], ryTop: 2.45, lift: 0.75, dip: 0.5 },
+  "crosshatch": { b: "thick" }, "wide-grill": { b: "lumpy" }, "thin-grill": { b: "thin" },
+  "speckle": { b: "soft" }, "chunky": { b: "faceted" }, "grain": { b: "jagged" },
+  "charred": { b: "double" }, "char-edges": { b: "wavy" }, "seared": { b: "slab" },
+  "bubbly": { b: "thin", lump: [0.3, 2.2] }, "crust": { b: "jagged", outline: 0.55 },
+  "caramelized": { b: "soft", lump: [0.32, 2.4] }, "juicy": { b: "double", outline: 0.5, rough: [0.03, 3] },
+  "blotchy": { b: "faceted", facets: 9, outline: 0.55 }, "well-done": { b: "slab", outline: 0.55, lump: [0.3, 2.4] },
+  "plain": { b: "wavy", wave: [0.18, 8] }, "pan-lines": { b: "thin", facets: 18, rough: [0, 0] },
+  "grill-char": { b: "jagged", rough: [0.16, 6], thick: 0.9 }, "cel-shaded": { b: "thick", double: true, rough: [0.03, 3] },
+};
+const BORDERS = {
+  rough: {}, thick: { outline: 0.6, rough: [0.08, 4] }, thin: { outline: 0.22, rough: [0.08, 4] },
+  lumpy: { lump: [0.38, 2.6], rough: [0.06, 4] }, jagged: { rough: [0.11, 8] }, faceted: { facets: 13, rough: [0, 0] },
+  wavy: { wave: [0.12, 14], rough: [0.04, 4] }, double: { double: true, rough: [0.08, 4] },
+  soft: { outline: 0.3, outlineCol: "#3c1a0e", rough: [0.05, 3] }, slab: { thick: 1.15, rough: [0.1, 4] },
+};
+const SHAPE_BASE = { rough: [0.13, 4], lump: [0.16, 1.6], wave: [0, 0], facets: 0, outline: 0.42, outlineCol: "#120703", double: false, thick: 0.65, lift: 0, ryTop: 2.2, dip: 0 };
+function designShape(name) {
+  const d = DESIGNS[name]; return Object.assign({}, SHAPE_BASE, BORDERS[d.b], d, { b: undefined });
+}
+
+function steakGrids(S, sh, drop, seed) {
+  const W = 9 * S, H = 9 * S, n = W * H, f = new Float32Array(n), EX = new Float32Array(n), EY = new Float32Array(n), D = new Float32Array(n);
+  const a = -0.5, ca = Math.cos(a), sa = Math.sin(a), rx = 3.95, ry = 2.2, p = 2.4;
+  let poly = null;
+  if (sh.facets) {
+    const r = mulberry32(seed * 31 + 13); poly = [];
+    for (let k = 0; k < sh.facets; k++) {
+      const tt = TAU * (k + 0.5 * r()) / sh.facets, c = Math.cos(tt), s = Math.sin(tt);
+      const rr = 1 / Math.pow(Math.abs(c) ** p + Math.abs(s) ** p, 1 / p);
+      const lx = rx * rr * c * (0.94 + 0.1 * r()), ly = ry * rr * s * (0.94 + 0.1 * r());
+      poly.push([4.5 + lx * ca - ly * sa, 4.2 + drop + lx * sa + ly * ca]);
+    }
+  }
+  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+    const X = (i + 0.5) / S, Y = (j + 0.5) / S, k = j * W + i;
+    const dx = X - 4.5, dy = Y - (4.2 + drop);
+    const ex = dx * ca + dy * sa; let ey = -dx * sa + dy * ca;
+    if (poly) { EX[k] = ex; EY[k] = ey; D[k] = sdPolygon(X, Y, poly); continue; }
+    ey += sh.lift * Math.max(ex / rx, 0) ** 2;
+    const lump = sh.lump[0] * Math.sin(ex * sh.lump[1] + 0.4);
+    let ry_ = (ey < 0 ? sh.ryTop : ry) + (ey < 0 ? lump : lump * 0.5);
+    if (sh.dip && ey < 0) ry_ -= sh.dip * Math.exp(-(((ex - 0.15) / 0.55) ** 2));
+    f[k] = Math.pow(Math.abs(ex / rx) ** p + Math.abs(ey / ry_) ** p, 1 / p) - 1;
+    EX[k] = ex; EY[k] = ey;
+  }
+  if (!poly) {
+    for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+      const k = j * W + i;
+      const gx = (f[j * W + Math.min(i + 1, W - 1)] - f[j * W + Math.max(i - 1, 0)]) * S / ((i > 0 && i < W - 1) ? 2 : 1);
+      const gy = (f[Math.min(j + 1, H - 1) * W + i] - f[Math.max(j - 1, 0) * W + i]) * S / ((j > 0 && j < H - 1) ? 2 : 1);
+      let d = f[k] / Math.max(Math.hypot(gx, gy), 1e-4);
+      const X = (i + 0.5) / S, Yr = (j + 0.5) / S - drop;
+      const [ra, rf] = sh.rough;
+      if (ra) { d += ra * samp(T[4], X * rf + 3, Yr * rf); if (rf <= 5) d += ra * 0.35 * samp(T[2], X * rf * 3, Yr * rf * 3); }
+      if (sh.wave[0]) d += sh.wave[0] * Math.sin(Math.atan2(EY[k] / ry, EX[k] / rx) * sh.wave[1]);
+      D[k] = d;
+    }
+  }
+  return { D, EX, EY };
+}
+
+function voronoi(u, v, seed) {
+  const iu = Math.floor(u), iv = Math.floor(v);
+  let f1 = 9, f2 = 9, hid = 0, ndx = 0, ndy = 0;
+  for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
+    const cu = iu + di, cv = iv + dj;
+    const h1 = fract(Math.sin(cu * 127.1 + cv * 311.7 + seed * 17) * 43758.5453);
+    const h2 = fract(Math.sin(cu * 269.5 + cv * 183.3 + seed * 31) * 24634.6345);
+    const h3 = fract(Math.sin(cu * 419.2 + cv * 371.9 + seed * 7) * 13758.937);
+    const dx = u - (cu + 0.15 + 0.7 * h1), dy = v - (cv + 0.15 + 0.7 * h2), d = Math.hypot(dx, dy);
+    if (d < f1) { f2 = f1; f1 = d; hid = h3; ndx = dx; ndy = dy; } else if (d < f2) f2 = d;
+  }
+  return [f1, f2, hid, ndx, ndy];
+}
+
+const BLACK = rgb(16, 8, 5);
+function steakColors(st) {
+  const b = unhex(st.meat), m = k => [Math.min(1, b[0] * k), Math.min(1, b[1] * k), Math.min(1, b[2] * k)];
+  return { base: b, mid: m(0.875), dark: m(0.59), light: m(1.25), rim: m(1.48), side: m(0.57), side2: m(0.375) };
+}
+function steakTexture(tex, X, Y, ex, ey, top, C, seed, ctx, cov) {
+  const n = fbm(seed, X * 6 + 20, Y * 6 + 60);
+  let face = scale3(mixc(C.base, C.mid, sat(0.5 + 0.4 * n)), 1.08 - 0.25 * sat((ey + 1.6) / 3.2));
+  const burns = (cs, k, w) => {
+    const u = (ex + k * ey) / Math.sqrt(1 + k * k); let b = 0, h = 0;
+    for (const c of cs) { const ww = w * (1 - 0.45 * sat(Math.abs(ey) / 2)); b = Math.max(b, cov(Math.abs(u - c) - ww)); h = Math.max(h, Math.exp(-(((u - c) / (w * 2.2)) ** 2))); }
+    return [b, h];
+  };
+  const grill = (cs, k, w, halo = 0.55) => { const [b, h] = burns(cs, k, w); face = mixc(face, C.dark, h * halo); face = mixc(face, BLACK, b); };
+  switch (tex) {
+    case "grill": grill([-2.1, 0, 2.1], 0.55, 0.21); break;
+    case "crosshatch": { const c4 = [-2.4, -0.8, 0.8, 2.4]; const [b1, h1] = burns(c4, 1.0, 0.13), [b2, h2] = burns(c4, -2.2, 0.13);
+      face = mixc(face, C.dark, Math.max(h1, h2) * 0.45); face = mixc(face, BLACK, Math.max(b1, b2)); break; }
+    case "wide-grill": grill([-1.3, 1.3], 0.4, 0.36, 0.4); break;
+    case "thin-grill": grill([-2.8, -1.4, 0, 1.4, 2.8], -0.45, 0.09, 0.35); break;
+    case "speckle": for (const s of ctx.specks) face = mixc(face, s.c, cov(Math.hypot(ex - s.x, (ey - s.y) * 1.3) - s.r)); break;
+    case "chunky": { const [f1, f2, hid] = voronoi(ex / 0.85, ey / 0.85, seed);
+      face = scale3([C.dark, C.mid, C.base, C.light][Math.min(3, Math.floor(hid * 4))], 0.95 + 0.15 * sat(0.55 - ey / 3));
+      face = mixc(face, scale3(C.dark, 0.75), sstep(0.12, 0.03, (f2 - f1) * 0.85)); break; }
+    case "grain": { const fib = Math.sin((ey + ex * 0.35) * 9 + 2.2 * fbm(seed + 2, X * 3, Y * 3));
+      face = mixc(face, C.dark, sstep(0.4, 0.75, fib) * 0.8); face = mixc(face, C.light, sstep(-0.65, -0.95, fib) * 0.6); break; }
+    case "charred": { const n2 = samp(T[(seed + 3) % 6], X * 6 + 5, Y * 6 + 9) + 0.25 * samp(T[(seed + 2) % 6], X * 20, Y * 20);
+      face = mixc(face, rgb(40, 20, 14), sstep(0.35, 0.55, n2) * 0.85); face = mixc(face, rgb(16, 8, 6), sstep(0.75, 0.9, n2)); break; }
+    case "char-edges": face = mixc(face, rgb(18, 9, 6), sstep(-1.5, -0.6, top + 0.15 * samp(T[5], X * 9, Y * 9))); break;
+    case "seared": face = scale3(mixc(C.light, scale3(C.dark, 0.8), sstep(-2, -0.4, top)), 1 + 0.08 * n); break;
+    case "bubbly": { const [f1, , hid, ddx, ddy] = voronoi(ex / 0.62, ey / 0.62, seed + 9); const rr = 0.22 + 0.16 * hid;
+      const inside = cov((f1 - rr) * 0.62); face = mixc(face, C.dark, inside * 0.8);
+      face = mixc(face, C.rim, inside * sstep(rr * 0.55, rr, f1) * sat(-(ddx + ddy) / (f1 + 1e-3)) * 0.8); break; }
+    case "crust": { const g = samp(T[1], X * 28, Y * 28) + 0.6 * samp(T[3], X * 55, Y * 55);
+      face = mixc(face, C.dark, sstep(0.3, 1.1, g) * 0.8); face = mixc(face, C.light, sstep(-0.4, -1.2, g) * 0.6); break; }
+    case "caramelized": { const n3 = samp(T[(seed + 1) % 6], X * 5, Y * 5);
+      face = mixc(face, rgb(150, 84, 50), sstep(0.2, 0.7, n3) * 0.75); face = mixc(face, C.dark, sstep(-0.5, -1, n3) * 0.6); break; }
+    case "juicy": {
+      for (const [hx, hy, hrx, hry, a] of [[-2.1, -1, 0.8, 0.17, 0.8], [0.5, -1.3, 1.1, 0.14, 0.6], [2.3, -0.7, 0.45, 0.12, 0.5]])
+        face = mixc(face, rgb(255, 226, 210), sat(-sdEllipse(ex, ey, hx, hy, hrx, hry, 0) / 0.12) * a);
+      for (const s of ctx.drops) face = mixc(face, rgb(240, 196, 176), sat(-(Math.hypot(ex - s.x, ey - s.y) - 0.07) / 0.05) * 0.7);
+      break; }
+    case "blotchy": { const n3 = samp(T[(seed + 2) % 6], X * 4 + 7, Y * 4 + 3);
+      face = mixc(face, C.light, sstep(0.25, 0.4, n3) * 0.8); face = mixc(face, C.dark, sstep(-0.25, -0.4, n3) * 0.8); break; }
+    case "well-done": face = mixc(face, C.dark, 0.5); break;
+    case "plain": break;
+    case "pan-lines": face = mixc(face, C.dark, sstep(0.5, 0.9, Math.sin(ey * 16 + 1.5 * samp(T[2], X * 4, Y * 4))) * 0.55); break;
+    case "grill-char": { const n2 = samp(T[(seed + 4) % 6], X * 7, Y * 7); face = mixc(face, rgb(30, 15, 10), sstep(0.7, 0.9, n2) * 0.9);
+      grill([-1.9, 0.2], -0.9, 0.2); break; }
+    case "cel-shaded": { const L = sat(0.5 - ey / 2.6); face = L > 0.6 ? C.light : L > 0.38 ? C.base : C.dark; break; }
+  }
+  return face;
+}
+
+function steakIcon(S, st, kind = "full", flash = false, hunger = false, design) {
+  const name = design || st.design, sh = design ? designShape(design) : st.shape, C = steakColors(st), seed = 2, cov = covf(S);
+  const top = steakGrids(S, sh, 0, seed), side = steakGrids(S, sh, sh.thick, seed);
+  const W = 9 * S, H = 9 * S, img = newImg(S, 9, 9), ow = sh.outline;
+  const r = mulberry32(seed + 77), ctx = { specks: [], drops: [] };
+  for (let i = 0; i < 70; i++) ctx.specks.push({ x: -3.8 + r() * 7.6, y: -2.2 + r() * 4.4, r: 0.09 + r() * 0.19, c: [C.dark, C.light, scale3(C.dark, 0.85)][i % 3] });
+  for (let i = 0; i < 14; i++) ctx.drops.push({ x: -3.3 + r() * 6.6, y: -1.6 + r() * 3.2 });
+  const outlineCol = unhex(sh.outlineCol), tintC = unhex(st.hungerTint);
+  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+    const k = j * W + i, X = (i + 0.5) / S, Y = (j + 0.5) / S;
+    const t = top.D[k], sd = side.D[k], body = Math.min(t, sd);
+    let a = cov(body); if (a <= 0) continue;
+    const inner = cov(body + ow);
+    let c;
+    if (kind === "container") {
+      const fill = hunger ? rgb(26, 34, 14) : rgb(34, 20, 14);
+      c = mixc(flash ? rgb(250, 240, 232) : rgb(10, 5, 2), fill, inner);
+      c = mixc(c, rgb(22, 13, 9), cov(Math.abs(t) - 0.1) * (sd < 0 ? 1 : 0) * inner);
+    } else {
+      let face = steakTexture(sh.texture || name, X, Y, top.EX[k], top.EY[k], t, C, seed, ctx, cov);
+      const gx = (top.D[j * W + Math.min(i + 1, W - 1)] - top.D[j * W + Math.max(i - 1, 0)]) * S / 2;
+      const gy = (top.D[Math.min(j + 1, H - 1) * W + i] - top.D[Math.max(j - 1, 0) * W + i]) * S / 2;
+      const facing = -(gx + gy) / Math.SQRT2, edge = sstep(-0.95, -0.3, t);
+      face = mixc(face, C.rim, edge * sstep(0.2, 0.7, facing) * 0.7);
+      face = mixc(face, C.side, edge * sstep(0.2, 0.7, -facing) * 0.5);
+      c = t < 0 ? face : mixc(C.side, C.side2, sat((X - 1) / 7));
+      c = mixc(c, scale3(C.side2, 0.7), cov(Math.abs(t) - 0.07) * (sd < 0 ? 1 : 0));
+      let out = outlineCol;
+      if (hunger) { c = mixc(c, tintC, 0.5); out = scale3(tintC, 0.2); }
+      if (flash) { c = mixc(c, WHITE, 0.4); out = rgb(250, 240, 232); }
+      if (sh.double) c = mixc(c, scale3(C.rim, 1.15), cov(Math.abs(body + ow + 0.12) - 0.05));
+      c = mixc(out, c, inner);
+    }
+    if (kind === "half") a *= cov(4.5 - X);
+    img.a[k] = a; img.col.set([sat(c[0]), sat(c[1]), sat(c[2])], k * 3);
+  }
+  return toRGBA(img);
+}
+
+/* =====================================================================
+   PNG encoder + pack builder
+   ===================================================================== */
+const CRC = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+function crc32(buf) { let c = 0xffffffff; for (let i = 0; i < buf.length; i++) c = CRC[(c ^ buf[i]) & 255] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; }
+function chunk(type, data) {
+  const out = new Uint8Array(12 + data.length), dv = new DataView(out.buffer);
+  dv.setUint32(0, data.length); for (let i = 0; i < 4; i++) out[4 + i] = type.charCodeAt(i);
+  out.set(data, 8); dv.setUint32(8 + data.length, crc32(out.subarray(4, 8 + data.length))); return out;
+}
+function encodePNG(data, w, h) {
+  const stride = w * 4, raw = new Uint8Array((stride + 1) * h);
+  for (let y = 0; y < h; y++) {
+    const ro = y * (stride + 1), so = y * stride; raw[ro] = 1;            // "Sub" filter
+    for (let x = 0; x < stride; x++) raw[ro + 1 + x] = (data[so + x] - (x >= 4 ? data[so + x - 4] : 0)) & 255;
+  }
+  const ihdr = new Uint8Array(13), dv = new DataView(ihdr.buffer);
+  dv.setUint32(0, w); dv.setUint32(4, h); ihdr[8] = 8; ihdr[9] = 6;
+  const idat = pako.deflate(raw, { level: 6 });
+  return new Blob([new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]), chunk("IHDR", ihdr), chunk("IDAT", idat), chunk("IEND", new Uint8Array(0))], { type: "image/png" });
+}
+/* =====================================================================
+   Settings
+   ===================================================================== */
+const DEFAULTS = {
+  design: "grill", shape: Object.assign(designShape("grill"), { texture: "grill" }),
+  meat: "#703624", hungerTint: "#64962e",
+  heart: { deep: "#1c0e54", cloud: "#5c28c4", bright: "#b05cff", outlineCol: "#0e041e", stars: 1, outline: 0.5, shine: 0.28, speed: 2 },
+  poison: { deep: "#0e3c18", cloud: "#329638", bright: "#96f06e" },
+  wither: { deep: "#121218", cloud: "#403e4c", bright: "#828092" },
+  gold: { deep: "#5a2e06", cloud: "#d28818", bright: "#ffe26e" },
+  armor: { deep: "#18225a", cloud: "#5060be", bright: "#bec8ff", outlineCol: "#0a081e", emptyCol: "#1a142a", stars: 1, outline: 0.5 },
+  xp: { deep: "#0a1e58", cloud: "#246ed6", bright: "#6ee8ff", outlineCol: "#060c22", bgCol: "#08081a", stars: 1, speed: 2, round: 1.6, outline: 0.45 },
+  boss: { deep: "#3c0a46", cloud: "#b428a0", bright: "#ff6edc" },
+  jump: { deep: "#5a2e06", cloud: "#d28818", bright: "#ffe26e" },
+  bubble: { col: "#78c8ff" },
+  cross: { col: "#ffffff", len: 4.5, thick: 1.0 },
+  res: 256,
+};
+const KEY = "galaxy-gui-studio-v2";
+const clone = o => JSON.parse(JSON.stringify(o));
+function deepMerge(base, over) {
+  for (const k of Object.keys(over || {})) {
+    if (over[k] && typeof over[k] === "object" && !Array.isArray(over[k]) && base[k] && typeof base[k] === "object") deepMerge(base[k], over[k]);
+    else if (k in base) base[k] = over[k];
+  }
+  return base;
+}
+let st = clone(DEFAULTS);
+try { deepMerge(st, JSON.parse(localStorage.getItem(KEY) || "null")); } catch (e) { /* storage unavailable */ }
+function save() { try { localStorage.setItem(KEY, JSON.stringify(st)); } catch (e) { /* ignore */ } }
+const getP = path => path.split(".").reduce((o, k) => o[k], st);
+const setP = (path, v) => { const ks = path.split("."), last = ks.pop(); ks.reduce((o, k) => o[k], st)[last] = v; };
+
+const pals = () => {
+  const hx = { stars: st.heart.stars, outline: st.heart.outline, shine: st.heart.shine };
+  return {
+    heart: galPal(st.heart), poison: galPal(st.poison, hx), wither: galPal(st.wither, hx), gold: galPal(st.gold, hx),
+    armor: galPal(st.armor), xp: Object.assign(galPal(st.xp), { star: rgb(230, 250, 255) }),
+    boss: galPal(st.boss, { stars: st.xp.stars }), jump: galPal(st.jump, { stars: st.xp.stars }),
+  };
+};
+
+/* =====================================================================
+   Control panel (built from this list)
+   ===================================================================== */
+const SPEED = ["", "slow", "calm", "lively", "fast"];
+const C = (path, label) => ({ type: "color", path, label });
+const R = (path, label, min, max, step) => ({ type: "range", path, label, min, max, step });
+const SP = (path, label) => ({ type: "speed", path, label });
+const SECTIONS = [
+  { id: "steak", title: "Steak (hunger bar)", cls: "meat", hint: "Pick a design, then shape it. Choosing a design loads its border settings into the sliders.", designs: true, groups: [
+    { controls: [C("meat", "Meat"), C("shape.outlineCol", "Outline"), C("hungerTint", "Hunger effect")] },
+    { controls: [R("shape.dip", "Top dip", 0, 0.9, 0.01), R("shape.lift", "Right end lift", 0, 1.3, 0.01), R("shape.ryTop", "Top arch", 2.0, 2.8, 0.01),
+      R("shape.rough.0", "Edge roughness", 0, 0.25, 0.005), R("shape.outline", "Outline thickness", 0.12, 0.7, 0.01), R("shape.thick", "Steak thickness", 0.3, 1.3, 0.01)] },
+  ] },
+  { id: "hearts", title: "Hearts", groups: [
+    { controls: [C("heart.deep", "Space"), C("heart.cloud", "Nebula"), C("heart.bright", "Glow"), C("heart.outlineCol", "Outline")] },
+    { controls: [R("heart.stars", "Stars", 0, 2.5, 0.05), R("heart.outline", "Outline thickness", 0.15, 1.0, 0.01), R("heart.shine", "Shine", 0, 0.8, 0.01), SP("heart.speed", "Animation speed")] },
+  ] },
+  { id: "states", title: "Poison, wither & absorption hearts", hint: "These share the outline, shine and stars of your normal hearts.", groups: [
+    { label: "Poison", controls: [C("poison.deep", "Space"), C("poison.cloud", "Nebula"), C("poison.bright", "Glow")] },
+    { label: "Wither", controls: [C("wither.deep", "Space"), C("wither.cloud", "Nebula"), C("wither.bright", "Glow")] },
+    { label: "Absorption (golden hearts)", controls: [C("gold.deep", "Space"), C("gold.cloud", "Nebula"), C("gold.bright", "Glow")] },
+  ] },
+  { id: "armor", title: "Armor", groups: [
+    { controls: [C("armor.deep", "Space"), C("armor.cloud", "Nebula"), C("armor.bright", "Glow"), C("armor.outlineCol", "Outline"), C("armor.emptyCol", "Empty slot")] },
+    { controls: [R("armor.stars", "Stars", 0, 2.5, 0.05), R("armor.outline", "Outline thickness", 0.15, 1.0, 0.01)] },
+  ] },
+  { id: "xp", title: "XP bar", cls: "xp", groups: [
+    { controls: [C("xp.deep", "Space"), C("xp.cloud", "Nebula"), C("xp.bright", "Glow"), C("xp.outlineCol", "Outline"), C("xp.bgCol", "Empty bar")] },
+    { controls: [R("xp.stars", "Stars", 0, 2.5, 0.05), SP("xp.speed", "Flow speed"), R("xp.round", "Corner roundness", 0, 2.5, 0.05), R("xp.outline", "Outline thickness", 0.1, 1.0, 0.01)] },
+  ] },
+  { id: "other", title: "Boss bar, jump bar, air & crosshair", hint: "Boss and jump bars use the XP bar's shape and outline.", groups: [
+    { label: "Boss health bar", controls: [C("boss.deep", "Space"), C("boss.cloud", "Nebula"), C("boss.bright", "Glow")] },
+    { label: "Horse jump bar", controls: [C("jump.deep", "Space"), C("jump.cloud", "Nebula"), C("jump.bright", "Glow")] },
+    { label: "Air bubbles & crosshair", controls: [C("bubble.col", "Bubbles"), C("cross.col", "Crosshair")] },
+    { controls: [R("cross.len", "Crosshair size", 1.5, 7.5, 0.1), R("cross.thick", "Crosshair thickness", 0.4, 2.5, 0.05)] },
+  ] },
+];
+const $ = id => document.getElementById(id);
+const idOf = path => "f-" + path.replace(/\./g, "-");
+const fmt = (ctl, v) => ctl.type === "speed" ? SPEED[5 - v] : (+v).toFixed(2);
+const controlsEl = $("controls"), exportCard = $("export-card");
+const allControls = [];
+for (const sec of SECTIONS) {
+  const card = document.createElement("section"); card.className = "card" + (sec.cls ? " " + sec.cls : "");
+  card.setAttribute("aria-labelledby", "h-" + sec.id);
+  const h = document.createElement("h2"); h.id = "h-" + sec.id;
+  const dot = document.createElement("span"); dot.className = "dot" + (sec.cls ? " " + sec.cls : ""); h.append(dot, sec.title); card.appendChild(h);
+  if (sec.hint) { const p = document.createElement("p"); p.className = "hint"; p.textContent = sec.hint; card.appendChild(p); }
+  if (sec.designs) { const d = document.createElement("div"); d.className = "designs"; d.id = "designs"; d.setAttribute("role", "group"); d.setAttribute("aria-label", "Steak designs"); card.appendChild(d); }
+  for (const g of sec.groups) {
+    if (g.label) { const l = document.createElement("p"); l.className = "group-label"; l.textContent = g.label; card.appendChild(l); }
+    const colorsBox = document.createElement("div"); colorsBox.className = "colors";
+    const slidersBox = document.createElement("div"); slidersBox.className = "sliders";
+    for (const ctl of g.controls) {
+      const id = idOf(ctl.path);
+      if (ctl.type === "color") {
+        const lab = document.createElement("label"); lab.className = "swatch"; lab.htmlFor = id; lab.textContent = ctl.label;
+        const inp = document.createElement("input"); inp.type = "color"; inp.id = id; lab.appendChild(inp); colorsBox.appendChild(lab);
+        inp.addEventListener("input", () => { setP(ctl.path, inp.value); changed(ctl.path === "meat" || ctl.path === "shape.outlineCol"); });
+      } else {
+        const f = document.createElement("div"); f.className = "field";
+        const lab = document.createElement("label"); lab.htmlFor = id; lab.textContent = ctl.label;
+        const out = document.createElement("output"); out.id = id + "-o"; lab.appendChild(out);
+        const inp = document.createElement("input"); inp.type = "range"; inp.id = id;
+        if (ctl.type === "speed") { inp.min = 1; inp.max = 4; inp.step = 1; } else { inp.min = ctl.min; inp.max = ctl.max; inp.step = ctl.step; }
+        f.append(lab, inp); slidersBox.appendChild(f);
+        inp.addEventListener("input", () => {
+          const v = +inp.value; setP(ctl.path, ctl.type === "speed" ? 5 - v : v); out.textContent = fmt(ctl, ctl.type === "speed" ? 5 - v : v);
+          changed(false);
+        });
+      }
+      allControls.push(ctl);
+    }
+    if (colorsBox.children.length) card.appendChild(colorsBox);
+    if (slidersBox.children.length) card.appendChild(slidersBox);
+  }
+  controlsEl.appendChild(card);
+}
+function syncInputs() {
+  for (const ctl of allControls) {
+    const v = getP(ctl.path), inp = $(idOf(ctl.path));
+    if (ctl.type === "color") inp.value = v;
+    else { inp.value = ctl.type === "speed" ? 5 - v : v; $(idOf(ctl.path) + "-o").textContent = fmt(ctl, v); }
+  }
+  for (const b of $("designs").children) b.setAttribute("aria-pressed", String(b.id === "d-" + st.design));
+  $("r256").setAttribute("aria-pressed", String(st.res === 256)); $("r512").setAttribute("aria-pressed", String(st.res === 512));
+}
+
+/* steak design thumbnails */
+const thumbs = {};
+for (const name of Object.keys(DESIGNS)) {
+  const b = document.createElement("button"); b.type = "button"; b.className = "design"; b.id = "d-" + name;
+  const c = document.createElement("canvas"); c.width = 112; c.height = 112; b.appendChild(c);
+  const s = document.createElement("span"); s.textContent = name; b.appendChild(s);
+  b.addEventListener("click", () => { st.design = name; st.shape = Object.assign(designShape(name), { texture: name }); syncInputs(); changed(true); });
+  $("designs").appendChild(b); thumbs[name] = c;
+}
+function drawThumbs() { for (const [name, c] of Object.entries(thumbs)) { const g = c.getContext("2d"); g.clearRect(0, 0, 112, 112); g.drawImage(toCanvas(steakIcon(12, st, "full", false, false, name)), 2, 2); } }
+
+/* =====================================================================
+   Preview
+   ===================================================================== */
+const PS = 8;              // preview pixels per base px (GUI scale 4 on a 2x canvas)
+const HEART_FRAMES = 56, XP_FRAMES = 48;
+function toCanvas(rgba) { const c = document.createElement("canvas"); c.width = rgba.w; c.height = rgba.h; c.getContext("2d").putImageData(new ImageData(rgba.data, rgba.w, rgba.h), 0, 0); return c; }
+let pv = null;
+function drawInto(id, rgba) { const cv = $(id), g = cv.getContext("2d"); g.clearRect(0, 0, cv.width, cv.height); g.drawImage(toCanvas(rgba), 0, 0); }
+function buildPreview() {
+  const P = pals(), hearts = [], xp = [];
+  for (let f = 0; f < HEART_FRAMES; f++) hearts.push([toCanvas(heartIcon(PS, f / HEART_FRAMES, P.heart, "full")), toCanvas(heartIcon(PS, f / HEART_FRAMES, P.heart, "half"))]);
+  for (let f = 0; f < XP_FRAMES; f++) xp.push(toCanvas(barIcon(PS, f / XP_FRAMES, P.xp, "fill", st.xp)));
+  pv = { hearts, xp, cont: toCanvas(heartIcon(PS, 0, P.heart, "container")), xpbg: toCanvas(barIcon(PS, 0, P.xp, "bg", st.xp)),
+    bossbg: toCanvas(barIcon(PS, 0, P.boss, "bg", st.xp, 8)), boss: toCanvas(barIcon(PS, 0, P.boss, "fill", st.xp, 8, false)),
+    cross: toCanvas(crosshairIcon(PS, st.cross)), bubble: toCanvas(bubbleIcon(PS, false, st.bubble.col)), pop: toCanvas(bubbleIcon(PS, true, st.bubble.col)),
+    steak: toCanvas(steakIcon(PS, st, "full")), steakHalf: toCanvas(steakIcon(PS, st, "half")), steakCont: toCanvas(steakIcon(PS, st, "container")),
+    armor: ["empty", "half", "full"].map(k => toCanvas(armorIcon(PS, k, P.armor, st.armor.emptyCol))) };
+  drawInto("bigHeart", heartIcon(40, 0.1, P.heart, "full"));
+  drawInto("bigSteak", steakIcon(40, st, "full"));
+  drawInto("bigArmor", armorIcon(40, "full", P.armor, st.armor.emptyCol));
+  const sc = $("states"), g = sc.getContext("2d"); g.clearRect(0, 0, sc.width, sc.height);
+  const items = [heartIcon(16, 0, P.poison, "full", false, 2), heartIcon(16, 0, P.wither, "full", false, 3), heartIcon(16, 0, P.gold, "full", false, 4),
+    heartIcon(16, 0, P.heart, "full", true), steakIcon(16, st, "full", false, true), bubbleIcon(16, false, st.bubble.col)];
+  items.forEach((it, i) => g.drawImage(toCanvas(it), i * 168 + 12, 0));
+  g.drawImage(toCanvas(barIcon(4, 0, P.jump, "bg", st.xp, 9)), (1008 - 728) / 2, 160);
+  g.drawImage(toCanvas(barIcon(4, 0, P.jump, "fill", st.xp, 9, false)), 0, 0, 728 * 0.6, 20, (1008 - 728) / 2, 160, 728 * 0.6, 20);
+}
+const hud = $("hud"), hctx = hud.getContext("2d");
+const ground = (() => {
+  const c = document.createElement("canvas"); c.width = 1600; c.height = 560; const g = c.getContext("2d");
+  const grad = g.createLinearGradient(0, 0, 0, 560); grad.addColorStop(0, "#6b8c4a"); grad.addColorStop(1, "#43602c");
+  g.fillStyle = grad; g.fillRect(0, 0, 1600, 560);
+  const r = mulberry32(5); for (let i = 0; i < 3600; i++) { g.fillStyle = r() < 0.5 ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.07)"; g.fillRect(r() * 1600, r() * 560, 4 + r() * 10, 4 + r() * 10); }
+  return c;
+})();
+const reduceMotion = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+const t0 = performance.now();
+function drawHud(now) {
+  if (pv) {
+    const g = 8, tick = (now - t0) / 50;
+    const hf = reduceMotion ? 0 : Math.floor(tick / st.heart.speed) % HEART_FRAMES, xf = reduceMotion ? 0 : Math.floor(tick / st.xp.speed) % XP_FRAMES;
+    hctx.drawImage(ground, 0, 0);
+    const x0 = (1600 - 182 * g) / 2;
+    hctx.drawImage(pv.bossbg, x0, 36); hctx.drawImage(pv.boss, 0, 0, Math.round(182 * 0.62 * PS), 5 * PS, x0, 36, Math.round(182 * 0.62 * g), 5 * g);
+    hctx.drawImage(pv.cross, 800 - 7.5 * g, 200 - 7.5 * g);
+    const xpY = 500, rowY = xpY - 10 * g, topY = rowY - 10 * g;
+    for (let i = 0; i < 10; i++) hctx.drawImage(pv.armor[i < 6 ? 2 : i === 6 ? 1 : 0], x0 + i * 8 * g, topY);
+    for (let i = 0; i < 10; i++) { const x = x0 + i * 8 * g; hctx.drawImage(pv.cont, x, rowY); if (i < 9) hctx.drawImage(pv.hearts[hf][i < 8 ? 0 : 1], x, rowY); }
+    for (let i = 0; i < 10; i++) { const x = x0 + 182 * g - 9 * g - i * 8 * g; hctx.drawImage(pv.steakCont, x, rowY); if (i < 8) hctx.drawImage(i < 7 ? pv.steak : pv.steakHalf, x, rowY); }
+    for (let i = 0; i < 7; i++) hctx.drawImage(i < 6 ? pv.bubble : pv.pop, x0 + 182 * g - 9 * g - i * 8 * g, topY);
+    hctx.drawImage(pv.xpbg, x0, xpY);
+    const fw = Math.round(182 * 0.72 * PS); hctx.drawImage(pv.xp[xf], 0, 0, fw, 5 * PS, x0, xpY, fw * g / PS, 5 * g);
+  }
+  requestAnimationFrame(drawHud);
+}
+requestAnimationFrame(drawHud);
+
+let timer = null;
+function changed(thumbsToo) {
+  save(); clearTimeout(timer);
+  timer = setTimeout(() => { buildPreview(); if (thumbsToo) drawThumbs(); }, 90);
+}
+$("r256").addEventListener("click", () => { st.res = 256; syncInputs(); save(); });
+$("r512").addEventListener("click", () => { st.res = 512; syncInputs(); save(); });
+$("reset").addEventListener("click", () => { st = clone(DEFAULTS); syncInputs(); changed(true); setStatus("Everything is back to the original pack.", "ok"); });
+$("copy").addEventListener("click", () => {
+  const text = JSON.stringify(st, null, 2), done = () => setStatus("Settings copied. Paste them to Claude to update the repository.", "ok");
+  try { navigator.clipboard.writeText(text).then(done, () => fallbackCopy(text)); } catch (e) { fallbackCopy(text); }
+});
+function fallbackCopy(text) {
+  const ta = document.createElement("textarea"); ta.value = text; ta.setAttribute("readonly", ""); ta.style.position = "fixed"; ta.style.opacity = "0";
+  document.body.appendChild(ta); ta.select();
+  let ok = false; try { ok = document.execCommand("copy"); } catch (e) { ok = false; }
+  document.body.removeChild(ta);
+  setStatus(ok ? "Settings copied. Paste them to Claude to update the repository." : "Copy was blocked here. Your settings are still saved in this browser.", ok ? "ok" : "err");
+}
+function setStatus(msg, cls = "") { const s = $("status"); s.textContent = msg; s.className = "status " + cls; }
+
+const pause = () => new Promise(r => setTimeout(r, 0));
+async function buildPack(progress) {
+  const S = st.res / 16, Wd = 256 * S, icons = new Uint8ClampedArray(Wd * Wd * 4), P = pals();
+  const put = (img, bx, by) => { for (let y = 0; y < img.h; y++) icons.set(img.data.subarray(y * img.w * 4, (y + 1) * img.w * 4), ((by * S + y) * Wd + bx * S) * 4); };
+  const jobs = [];
+  jobs.push(() => put(crosshairIcon(S, st.cross), 0, 0));
+  for (const row of [0, 45]) {
+    jobs.push(() => { put(heartIcon(S, 0, P.heart, "container"), 16, row); put(heartIcon(S, 0, P.heart, "container", true), 25, row); put(heartIcon(S, 0, P.heart, "container"), 34, row); put(heartIcon(S, 0, P.heart, "container", true), 43, row); });
+    [[P.heart, 0], [P.poison, 2], [P.wither, 3]].forEach(([pp, sd], n) => {
+      const x = 52 + n * 36;
+      jobs.push(() => { put(heartIcon(S, 0, pp, "full", false, sd), x, row); put(heartIcon(S, 0, pp, "half", false, sd), x + 9, row); });
+      jobs.push(() => { put(heartIcon(S, 0, pp, "full", true, sd), x + 18, row); put(heartIcon(S, 0, pp, "half", true, sd), x + 27, row); });
+    });
+    jobs.push(() => { put(heartIcon(S, 0, P.gold, "full", false, 4), 160, row); put(heartIcon(S, 0, P.gold, "half", false, 4), 169, row); });
+  }
+  jobs.push(() => { for (const [k, x] of [["empty", 16], ["half", 25], ["full", 34]]) put(armorIcon(S, k, P.armor, st.armor.emptyCol), x, 9); });
+  jobs.push(() => { put(heartIcon(S, 0, P.heart, "container"), 52, 9); put(heartIcon(S, 0, P.heart, "full"), 88, 9); put(heartIcon(S, 0, P.heart, "half"), 97, 9); });
+  jobs.push(() => { put(bubbleIcon(S, false, st.bubble.col), 16, 18); put(bubbleIcon(S, true, st.bubble.col), 25, 18); });
+  const food = [["container", 0, 0, 16], ["container", 1, 0, 25], ["container", 0, 0, 34], ["container", 1, 0, 43], ["full", 0, 0, 52], ["half", 0, 0, 61], ["full", 1, 0, 70], ["half", 1, 0, 79],
+    ["full", 0, 1, 88], ["half", 0, 1, 97], ["full", 1, 1, 106], ["half", 1, 1, 115], ["container", 0, 1, 133], ["container", 1, 1, 142]];
+  for (const [k, fl, hu, x] of food) jobs.push(() => put(steakIcon(S, st, k, !!fl, !!hu), x, 27));
+  jobs.push(() => { put(barIcon(S, 0, P.xp, "bg", st.xp), 0, 64); put(barIcon(S, 0, P.xp, "fill", st.xp), 0, 69); });
+  jobs.push(() => { put(barIcon(S, 0, P.boss, "bg", st.xp, 8), 0, 74); put(barIcon(S, 0, P.boss, "fill", st.xp, 8, false), 0, 79); });
+  jobs.push(() => { put(barIcon(S, 0, P.jump, "bg", st.xp, 9), 0, 84); put(barIcon(S, 0, P.jump, "fill", st.xp, 9, false), 0, 89); });
+  jobs.push(() => { for (let l = 0; l < 6; l++) put(pingIcon(S, l), 0, 176 + l * 8); });
+
+  const hw = 18 * S, hh = 9 * S, hearts = new Uint8ClampedArray(hw * hh * HEART_FRAMES * 4);
+  for (let f = 0; f < HEART_FRAMES; f++) jobs.push(() => {
+    const full = heartIcon(S, f / HEART_FRAMES, P.heart, "full"), half = heartIcon(S, f / HEART_FRAMES, P.heart, "half");
+    for (let y = 0; y < hh; y++) {
+      const o = ((f * hh + y) * hw) * 4;
+      hearts.set(full.data.subarray(y * full.w * 4, (y + 1) * full.w * 4), o);
+      hearts.set(half.data.subarray(y * half.w * 4, (y + 1) * half.w * 4), o + full.w * 4);
+    }
+  });
+  const xw = 182 * S, xh = 5 * S, xp = new Uint8ClampedArray(xw * xh * XP_FRAMES * 4);
+  for (let f = 0; f < XP_FRAMES; f++) jobs.push(() => xp.set(barIcon(S, f / XP_FRAMES, P.xp, "fill", st.xp).data, f * xw * xh * 4));
+
+  const total = jobs.length + 4;
+  for (let i = 0; i < jobs.length; i++) { jobs[i](); progress((i + 1) / total, "Drawing textures…"); await pause(); }
+
+  const zip = new JSZip(), anim = "assets/minecraft/mcpatcher/anim/galaxygui/";
+  zip.file("pack.mcmeta", JSON.stringify({ pack: { pack_format: 1, description: `§dGalaxy GUI §7${st.res}x\n§8Galaxy hearts & XP, steak hunger` } }, null, 2));
+  const icon = heartIcon(28, 0, P.heart, "full"), pk = new Uint8ClampedArray(256 * 256 * 4);
+  for (let y = 0; y < icon.h; y++) pk.set(icon.data.subarray(y * icon.w * 4, (y + 1) * icon.w * 4), ((y + 2) * 256 + 2) * 4);
+  zip.file("pack.png", encodePNG(pk, 256, 256));
+  progress((jobs.length + 1) / total, "Compressing icons…"); await pause();
+  zip.file("assets/minecraft/textures/gui/icons.png", encodePNG(icons, Wd, Wd));
+  progress((jobs.length + 2) / total, "Compressing heart animation…"); await pause();
+  zip.file(anim + "hearts.png", encodePNG(hearts, hw, hh * HEART_FRAMES));
+  progress((jobs.length + 3) / total, "Compressing XP animation…"); await pause();
+  zip.file(anim + "xp.png", encodePNG(xp, xw, xh * XP_FRAMES));
+  const props = (src, x, y, w, h, dur) => `from=./${src}\nto=textures/gui/icons.png\nx=${x}\ny=${y}\nw=${w}\nh=${h}\nduration=${dur}\n`;
+  zip.file(anim + "hearts.properties", props("hearts.png", 52 * S, 0, 18 * S, 9 * S, st.heart.speed));
+  zip.file(anim + "hearts_hardcore.properties", props("hearts.png", 52 * S, 45 * S, 18 * S, 9 * S, st.heart.speed));
+  zip.file(anim + "xp.properties", props("xp.png", 0, 69 * S, 182 * S, 5 * S, st.xp.speed));
+  progress(1, "Zipping…"); await pause();
+  return zip.generateAsync({ type: "blob", compression: "STORE" });
+}
+
+let downloads = null;
+(async () => { try { downloads = window.claude ? await window.claude.use("downloads") : null; } catch (e) { downloads = null; } })();
+$("build").addEventListener("click", async () => {
+  const btn = $("build"); btn.disabled = true;
+  if (typeof pako === "undefined" || typeof JSZip === "undefined") { setStatus("The zip tools did not load. Reload the page and try again.", "err"); btn.disabled = false; return; }
+  const bar = $("bar");
+  try {
+    setStatus("Building the " + st.res + "x pack…");
+    const blob = await buildPack((p, msg) => { bar.style.width = Math.round(p * 100) + "%"; setStatus(msg); });
+    const name = `Galaxy-GUI-${st.res}x-1.8.9.zip`, mb = (blob.size / 1e6).toFixed(1);
+    if (!downloads) { setStatus(`Built ${name} (${mb} MB), but saving files isn't available in this view. Open the artifact on claude.ai to download it.`, "err"); return; }
+    setStatus(`Built ${name} (${mb} MB). Confirm the download…`);
+    await downloads.save({ filename: name, data: blob });
+    setStatus(`Saved ${name} (${mb} MB).`, "ok");
+  } catch (e) {
+    const code = e && e.code;
+    if (code === "declined") setStatus("Download cancelled.");
+    else if (code === "too_large") setStatus("That file is too large for this device. Try the 256x pack.", "err");
+    else if (code === "rate_limited") setStatus("A save prompt is already open. Finish it, then try again.", "err");
+    else if (e instanceof RangeError) setStatus("Your browser ran out of memory. Try the 256x pack or a desktop browser.", "err");
+    else setStatus("The build failed: " + ((e && e.message) || e), "err");
+  } finally { btn.disabled = false; setTimeout(() => { bar.style.width = "0%"; }, 1200); }
+});
+
+syncInputs();
+setTimeout(() => { buildPreview(); drawThumbs(); }, 0);
+</script>

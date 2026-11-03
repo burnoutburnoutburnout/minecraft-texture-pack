@@ -60,3 +60,11 @@ meat texture and border style:
 ```bash
 python3 generator/build.py --steak cracked
 ```
+
+## Galaxy GUI Studio (in-browser editor)
+
+[`studio/galaxy-gui-studio.html`](studio/galaxy-gui-studio.html) is an editor for the whole HUD: a live
+animated preview, controls for every element (hearts, poison/wither/absorption hearts, steak design and
+shape, armor, XP bar, boss and jump bars, air bubbles, crosshair), and a button that builds the 256x or
+512x pack in the browser. It is a JavaScript port of `generator/build.py`, so its noise textures differ
+slightly from the Python build.
