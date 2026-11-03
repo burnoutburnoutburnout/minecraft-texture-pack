@@ -18,7 +18,7 @@ Usage:
     python3 generator/build.py                  # builds 256x and 512x into dist/
     python3 generator/build.py --res 256        # only one resolution
     python3 generator/build.py --preview        # also writes preview images
-    python3 generator/build.py --steak t-bone   # choose a steak design
+    python3 generator/build.py --steak sticker  # choose a steak design
 
 Requires: numpy, Pillow
 """
@@ -217,35 +217,38 @@ DARK_STEAK = dict(base=(128, 66, 44), mid=(114, 56, 36), dark=(88, 40, 24),
                   light=(150, 86, 60), rim=(168, 104, 76), side=(80, 38, 22),
                   side2=(52, 22, 12), outline=(28, 11, 5))
 
-STEAK_BASE = dict(cx=4.5, cy=4.2, rx=3.95, ry=2.2, p=2.4, angle=-0.5, lump=0.16,
-                  lump_freq=1.6, thick=0.65, outline_w=0.42, colors=DARK_STEAK,
-                  burns=(-2.1, 0.0, 2.1), burn_slant=0.55, burn_w=0.2, crosshatch=False,
-                  bone=None, fat=False, char=0.0, gloss=0.45, seed=2)
+CHAR_STEAK = dict(DARK_STEAK, base=(104, 50, 32), mid=(92, 42, 26),
+                  light=(124, 66, 44), rim=(140, 80, 56))
 
+STEAK_BASE = dict(cx=4.5, cy=4.2, rx=3.95, ry=2.2, p=2.4, angle=-0.5, lump=0.16,
+                  lump_freq=1.6, lump_bottom=0.4, taper=0.0, bend=0.0, notch=None,
+                  thick=0.65, outline_w=0.42, outline_var=0.0, sticker=0.0,
+                  colors=DARK_STEAK, burns=(-2.1, 0.0, 2.1), burn_slant=0.55, burn_w=0.2,
+                  crosshatch=False, bone=None, fat=False, char=0.0, flat=False,
+                  marble=0.0, gloss=0.45, seed=2)
+
+# Every design keeps the Minecraft steak's tilted slab; they differ in outline
+# shape and drawing style.
+CROSS = dict(burns=(-2.4, -0.8, 0.8, 2.4), burn_w=0.13, crosshatch=True, burn_slant=1.0)
 STEAK_VARIANTS = {
-    "classic": dict(),
-    "crosshatch": dict(burns=(-2.4, -0.8, 0.8, 2.4), burn_w=0.13, crosshatch=True,
-                       burn_slant=1.0),
-    "t-bone": dict(bone="t", burns=(-2.6, 2.4), ry=2.3, p=2.2),
-    "ribeye-fat": dict(fat=True, rx=3.7, ry=2.45, p=2.0, lump=0.25, lump_freq=2.2,
-                       burns=(-1.3, 1.0)),
-    "charred": dict(char=0.75, burns=(-2.4, -0.8, 0.8, 2.4), burn_w=0.16, gloss=0.25,
-                    colors=dict(DARK_STEAK, base=(104, 50, 32), mid=(92, 42, 26),
-                                light=(124, 66, 44), rim=(140, 80, 56))),
-    "thick-cut": dict(rx=3.6, ry=2.0, thick=1.3, cy=3.7, p=3.0, angle=-0.4,
-                      burns=(-1.6, 0.0, 1.6), burn_w=0.24),
-    "tomahawk": dict(bone="tomahawk", cx=5.5, cy=3.9, rx=2.8, ry=2.15, p=2.1,
-                     angle=-0.55, burns=(-0.9, 0.9), outline_w=0.3),
-    "filet": dict(rx=3.0, ry=2.6, p=2.0, thick=1.1, cy=3.8, angle=-0.3, lump=0.06,
-                  burns=(-1.1, 0.0, 1.1), burn_slant=-1.0, burn_w=0.18),
-    "rustic": dict(lump=0.38, lump_freq=2.8, p=2.0, burns=(-2.2, 0.0, 2.2),
-                   burn_slant=-0.5, burn_w=0.26, seed=4),
-    "glossy": dict(rx=4.0, ry=2.05, p=2.8, angle=-0.6, thick=0.8, outline_w=0.3,
-                   burns=(-1.7, 0.4), burn_w=0.28, burn_slant=1.2, gloss=0.75,
-                   colors=dict(DARK_STEAK, base=(136, 64, 40), mid=(118, 52, 32),
-                               light=(166, 90, 60), rim=(190, 116, 84))),
+    "char-cross": dict(CROSS, char=0.7, colors=CHAR_STEAK, gloss=0.25),
+    "wavy-edge": dict(lump=0.17, lump_freq=4.6, lump_bottom=1.0, char=0.4,
+                      burns=(-2.3, -0.8, 0.8, 2.3), burn_w=0.15),
+    "boxy": dict(CROSS, p=4.2, rx=3.75, ry=2.05, lump=0.05, thick=0.8),
+    "tapered": dict(taper=-0.28, rx=4.0, char=0.5, colors=CHAR_STEAK,
+                    burns=(-2.4, -0.8, 0.8, 2.4), burn_w=0.16),
+    "kidney": dict(bend=1.15, ry=1.9, cy=4.0, lump=0.08, char=0.4,
+                   burns=(-2.0, 0.0, 2.0), burn_w=0.18),
+    "bitten": dict(CROSS, notch=(3.0, -1.6, 1.35), char=0.4),
+    "sticker": dict(sticker=0.38, rx=3.6, ry=2.0, cy=4.15, char=0.6, colors=CHAR_STEAK,
+                    burns=(-1.9, -0.6, 0.6, 1.9), burn_w=0.15, outline_w=0.34),
+    "brush": dict(CROSS, outline_w=0.5, outline_var=0.55, lump=0.24, lump_freq=2.6,
+                  char=0.3),
+    "flat-toon": dict(flat=True, gloss=0.0, burns=(-2.0, 0.0, 2.0), burn_w=0.26,
+                      lump=0.1),
+    "marbled": dict(CROSS, marble=0.85, gloss=0.6, char=0.2),
 }
-STEAK_DEFAULT = "classic"
+STEAK_DEFAULT = "char-cross"
 
 
 # --------------------------------------------------------------------------- #
@@ -385,12 +388,19 @@ class Renderer:
         dx, dy = X - V["cx"], Y - (V["cy"] + drop)
         ex = dx * math.cos(a) + dy * math.sin(a)
         ey = -dx * math.sin(a) + dy * math.cos(a)
+        rx = V["rx"]
+        ey = ey - V["bend"] * ((ex / rx) ** 2 - 0.35)          # kidney / banana curve
         lump = V["lump"] * np.sin(ex * V["lump_freq"] + 0.4)
-        ry_ = V["ry"] + np.where(ey < 0, lump, lump * 0.4)
+        ry_ = V["ry"] * (1.0 + V["taper"] * ex / rx)
+        ry_ = ry_ + np.where(ey < 0, lump, lump * V["lump_bottom"])
         p = V["p"]
-        f = (np.abs(ex / V["rx"]) ** p + np.abs(ey / ry_) ** p) ** (1.0 / p) - 1.0
+        f = (np.abs(ex / rx) ** p + np.abs(ey / ry_) ** p) ** (1.0 / p) - 1.0
         gy, gx = np.gradient(f, 1.0 / self.S)
-        return f / np.maximum(np.hypot(gx, gy), 1e-4), ex, ey
+        d = f / np.maximum(np.hypot(gx, gy), 1e-4)
+        if V["notch"]:
+            nx, ny, nr = V["notch"]
+            d = -smin(-d, np.hypot(ex - nx, ey - ny) - nr, 0.35)  # a bite out of the edge
+        return d, ex, ey
 
     def steak_bone(self, X, Y, V, ex, ey):
         """Bone sticking out of the steak's left end (tomahawk style)."""
@@ -414,8 +424,11 @@ class Renderer:
         if V["bone"] == "tomahawk":
             bone = self.steak_bone(X, Y, V, ex, ey)
             body = np.minimum(body, bone)
-        alpha = self.cov(body)
+        sticker = V["sticker"]
+        alpha = self.cov(body - sticker)
         ow = V["outline_w"]
+        if V["outline_var"]:
+            ow = ow * (1.0 + V["outline_var"] * samp(NOISE[1], X * 4.0 + 7.0, Y * 4.0))
         inner = self.cov(body + ow)
         if kind == "container":
             fill = rgb(26, 34, 14) if hunger else rgb(36, 22, 16)
@@ -427,9 +440,17 @@ class Renderer:
             on_face = smoothstep(-0.2, -0.55, top)
             # top face: chunky lighter/darker patches
             n = fbm(V["seed"], X * 6.0 + 20.0, Y * 6.0 + 60.0)
-            face = mix(C["base"], C["mid"], sat(0.5 + 0.4 * n))
-            face = mix(face, C["dark"], smoothstep(0.35, 0.6, n) * 0.8)
-            face = mix(face, C["light"], smoothstep(-0.5, -0.8, n) * 0.8)
+            if V["flat"]:
+                # flat cel look: two tones with hard-edged patches
+                face = mix(C["base"], C["dark"], smoothstep(0.5, 0.55, n) * 0.7)
+            else:
+                face = mix(C["base"], C["mid"], sat(0.5 + 0.4 * n))
+                face = mix(face, C["dark"], smoothstep(0.35, 0.6, n) * 0.8)
+                face = mix(face, C["light"], smoothstep(-0.5, -0.8, n) * 0.8)
+            if V["marble"]:
+                m = fbm(V["seed"] + 1, X * 5.0 + 40.0, Y * 9.0 + 11.0)
+                streak = np.exp(-(m / 0.15) ** 2) * smoothstep(-0.3, -0.8, top)
+                face = mix(face, rgb(206, 160, 138), streak * V["marble"])
             if V["char"]:
                 n2 = fbm(V["seed"] + 3, X * 7.0 + 5.0, Y * 7.0 + 9.0)
                 face = mix(face, rgb(24, 12, 8), smoothstep(0.6, 0.95, n2) * V["char"])
@@ -438,8 +459,12 @@ class Renderer:
             gy, gx = np.gradient(top, 1.0 / self.S)
             facing = -(gx + gy) / math.sqrt(2.0)
             edge = smoothstep(-1.0, -0.3, top)
-            face = mix(face, C["rim"], edge * smoothstep(0.2, 0.7, facing) * 0.8)
-            face = mix(face, C["side"], edge * smoothstep(0.2, 0.7, -facing) * 0.6)
+            if V["flat"]:
+                band = smoothstep(-0.62, -0.55, top)
+                face = mix(face, C["rim"], band * smoothstep(0.25, 0.3, facing))
+            else:
+                face = mix(face, C["rim"], edge * smoothstep(0.2, 0.7, facing) * 0.8)
+                face = mix(face, C["side"], edge * smoothstep(0.2, 0.7, -facing) * 0.6)
             # fat rim along the upper edge
             if V["fat"]:
                 band = smoothstep(-0.75, -0.6, top) * (ey < 0) * smoothstep(-0.3, -1.0, ey)
@@ -485,6 +510,8 @@ class Renderer:
                 col = mix(col, WHITE, 0.4)
                 outline = rgb(250, 240, 232)
             col = mix(outline, col, inner)
+        if sticker:
+            col = mix(rgb(250, 246, 238), col, self.cov(body))
         if kind == "half":
             # the food bar fills right-to-left, so the half icon keeps the right side
             alpha = alpha * self.cov(4.5 - X)

@@ -50,8 +50,9 @@ Colours live in the `PAL_*` palettes near the top of the script. Animation speed
 ### Steak designs
 
 There are 10 steak designs to choose from (see [`previews/steak-variants.png`](previews/steak-variants.png)):
-`classic`, `crosshatch`, `t-bone`, `ribeye-fat`, `charred`, `thick-cut`, `tomahawk`, `filet`, `rustic`, `glossy`.
+`char-cross` (default), `wavy-edge`, `boxy`, `tapered`, `kidney`, `bitten`, `sticker`, `brush`, `flat-toon`, `marbled`.
+They all keep the Minecraft steak's tilted slab shape and differ in outline shape and drawing style.
 
 ```bash
-python3 generator/build.py --steak tomahawk
+python3 generator/build.py --steak sticker
 ```
