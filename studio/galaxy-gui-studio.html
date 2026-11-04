@@ -100,6 +100,16 @@ select { background: var(--panel-2); color: var(--fg); border: 1px solid var(--l
 .theme span { font-size: 12px; color: var(--muted); padding-inline: 4px; }
 .theme:hover { border-color: var(--muted); }
 .theme:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.saves { display: grid; gap: 10px; border-top: 1px solid var(--line); padding-top: 14px; }
+.saves input[type="text"] { flex: 1 1 200px; min-width: 0; background: var(--panel-2); color: var(--fg); border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; font: inherit; }
+.save-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.save-list li { display: flex; align-items: center; gap: 8px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 6px 8px 6px 12px; min-width: 0; }
+.save-list .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.save-list .when { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.save-list .btn { padding: 6px 10px; font-size: 13px; }
+.save-list .empty { color: var(--muted); font-size: 13px; background: none; border: 0; padding: 0; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+label.btn { display: inline-flex; align-items: center; }
 .toggle { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; cursor: pointer; }
 .toggle input { width: 18px; height: 18px; accent-color: var(--meat); }
 .colors { display: flex; flex-wrap: wrap; gap: 12px; }
@@ -166,6 +176,21 @@ code { font-family: var(--font-mono); font-size: 0.9em; }
           <li>Install: put the zip in <code>.minecraft/resourcepacks/</code> without unzipping it.</li>
           <li>Your edits are remembered in this browser. Use Copy settings to send them to Claude.</li>
         </ul>
+        <div class="saves">
+          <p class="group-label">Saved setups</p>
+          <div class="export-row">
+            <label class="sr-only" for="save-name">Name for this setup</label>
+            <input type="text" id="save-name" maxlength="40" placeholder="Name this setup, e.g. Galaxy obsidian">
+            <button type="button" class="btn primary" id="save-btn">Save</button>
+          </div>
+          <ul class="save-list" id="save-list"></ul>
+          <div class="export-row">
+            <button type="button" class="btn" id="save-download">Download settings file</button>
+            <label class="btn" for="save-upload">Load settings file</label>
+            <input type="file" id="save-upload" accept=".json,application/json" hidden>
+          </div>
+          <p class="hint">Saved setups live in this browser. Download a settings file to keep a backup or move your setup to another device.</p>
+        </div>
       </section>
     </div>
   </div>
@@ -2797,6 +2822,55 @@ function fallbackCopy(text) {
   document.body.removeChild(ta);
   setStatus(ok ? "Settings copied. Paste them to Claude to update the repository." : "Copy was blocked here. Your settings are still saved in this browser.", ok ? "ok" : "err");
 }
+/* ---------- saved setups ---------- */
+const SAVES_KEY = "galaxy-gui-studio-saves";
+function readSaves() { try { return JSON.parse(localStorage.getItem(SAVES_KEY) || "[]"); } catch (e) { return []; } }
+function writeSaves(list) { try { localStorage.setItem(SAVES_KEY, JSON.stringify(list)); return true; } catch (e) { return false; } }
+function loadSetup(data) {
+  const tab = st.tab; st = deepMerge(clone(DEFAULTS), data); st.tab = tab;
+  save(); syncInputs(); changed(); showTab(); themesDrawn = false;
+}
+function renderSaves() {
+  const ul = $("save-list"); ul.textContent = "";
+  const list = readSaves();
+  if (!list.length) { const li = document.createElement("li"); li.className = "empty"; li.textContent = "No saved setups yet."; ul.appendChild(li); return; }
+  list.forEach((s, i) => {
+    const li = document.createElement("li");
+    const nm = document.createElement("span"); nm.className = "nm"; nm.textContent = s.name;
+    const when = document.createElement("span"); when.className = "when"; when.textContent = new Date(s.time).toLocaleString([], { dateStyle: "short", timeStyle: "short" });
+    const ld = document.createElement("button"); ld.type = "button"; ld.className = "btn"; ld.textContent = "Load";
+    ld.addEventListener("click", () => { loadSetup(s.data); setStatus(`Loaded "${s.name}".`, "ok"); });
+    const del = document.createElement("button"); del.type = "button"; del.className = "btn"; del.textContent = "Delete";
+    del.addEventListener("click", () => {
+      if (del.dataset.armed) { const l = readSaves(); l.splice(i, 1); writeSaves(l); renderSaves(); setStatus(`Deleted "${s.name}".`); return; }
+      del.dataset.armed = "1"; del.textContent = "Confirm delete"; setTimeout(() => { if (del.isConnected) { delete del.dataset.armed; del.textContent = "Delete"; } }, 3000);
+    });
+    li.append(nm, when, ld, del); ul.appendChild(li);
+  });
+}
+$("save-btn").addEventListener("click", () => {
+  const name = ($("save-name").value || "").trim() || "My setup " + (readSaves().length + 1);
+  const list = readSaves().filter(s => s.name !== name);                    // saving under an existing name replaces it
+  list.unshift({ name, time: Date.now(), data: clone(st) });
+  if (writeSaves(list)) { $("save-name").value = ""; renderSaves(); setStatus(`Saved "${name}".`, "ok"); }
+  else setStatus("This browser blocked saving. Use Download settings file instead.", "err");
+});
+$("save-name").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); $("save-btn").click(); } });
+$("save-download").addEventListener("click", async () => {
+  if (!downloads) { setStatus("Downloads aren't available in this view. Use Copy settings instead.", "err"); return; }
+  try { await downloads.save({ filename: "galaxy-gui-settings.json", data: JSON.stringify({ app: "galaxy-gui-studio", version: 1, settings: st }, null, 2) }); setStatus("Settings file saved.", "ok"); }
+  catch (e) { setStatus(e && e.code === "declined" ? "Download cancelled." : "Couldn't save the file: " + ((e && e.message) || e), e && e.code === "declined" ? "" : "err"); }
+});
+$("save-upload").addEventListener("change", async () => {
+  const f = $("save-upload").files[0]; if (!f) return;
+  try {
+    const j = JSON.parse(await f.text()), data = j.settings || j;
+    if (!data || typeof data !== "object" || !data.heart || !data.shape) throw new Error("not a Galaxy GUI settings file");
+    loadSetup(data); setStatus(`Loaded settings from ${f.name}.`, "ok");
+  } catch (e) { setStatus("That file couldn't be loaded: " + e.message + ".", "err"); }
+  $("save-upload").value = "";
+});
+renderSaves();
 function setStatus(msg, cls = "") { const s = $("status"); s.textContent = msg; s.className = "status " + cls; }
 
 const pause = () => new Promise(r => setTimeout(r, 0));
