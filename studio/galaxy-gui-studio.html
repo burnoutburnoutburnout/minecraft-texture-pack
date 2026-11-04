@@ -1269,6 +1269,8 @@ const GEM_HEART = [[4.5, 1.75], [5.3, 1.0], [6.6, 0.6], [7.9, 0.85], [8.6, 1.7],
 const GEM_SHAPE = { custom: true, points: GEM_HEART, smooth: 0.08 };
 /* puffy classic heart: shape fitted to a reference hunger bar's hearts (wide lobes, shallow notch, short point) */
 const PUFFY_SHAPE = {w:  0.908,  h:  1.057,  round:  0.589,  tip:  0.849,  cleft:  -0.381,  size:  1.114,  posY:  0.115};
+/* classic heart: shape fitted to a second reference (flatter top, straighter sides, longer sharp point) */
+const CLASSIC_SHAPE = { w: 0.915, h: 1.204, round: 0.18, tip: 0.731, cleft: -0.52, size: 1.088, posY: 0.669 };
 const D_ = (texture, c1, c2, c3, outlineCol, extra = {}) => Object.assign({ texture, c1, c2, c3, outlineCol }, extra);
 const EL_DESIGNS = {
   heart: {
@@ -1286,6 +1288,8 @@ const EL_DESIGNS = {
     aurora: D_("aurora", "#04122a", "#22e0a0", "#a070ff", "#020a18"),
     puffy: D_("galaxy", "#1c0e54", "#5c28c4", "#b05cff", "#05030c", Object.assign({}, PUFFY_SHAPE, { outline: 0.7, shine: 0.75, shineSize: 0.6, shineX: -1.6, shineY: -1.7, glow: 0.08, shade: 0.35, falloff: 1.1 })),
     "puffy-obsidian": D_("galaxy", "#1c0e54", "#5c28c4", "#b05cff", "#05030c", Object.assign({}, PUFFY_SHAPE, { outline: 0.2, outlineStyle: "ink", frame: 0.95, frameMat: "obsidian", border: "obsidianFrame", shine: 0.6, shineSize: 0.55, shineX: -1.35, shineY: -1.45, glow: 0 })),
+    classic: D_("galaxy", "#1c0e54", "#5c28c4", "#b05cff", "#05030c", Object.assign({}, CLASSIC_SHAPE, { outline: 0.55, shine: 0.6, shineSize: 0.55, shineX: -1.7, shineY: -2.6, glow: 0.08, shade: 0.35, falloff: 1.1 })),
+    "classic-obsidian": D_("galaxy", "#1c0e54", "#5c28c4", "#b05cff", "#05030c", Object.assign({}, CLASSIC_SHAPE, { outline: 0.2, outlineStyle: "ink", frame: 0.95, frameMat: "obsidian", border: "obsidianFrame", shine: 0.5, shineSize: 0.5, shineX: -1.5, shineY: -2.3, glow: 0 })),
     "galaxy-stone": D_("galaxy", "#1c0e54", "#5c28c4", "#b05cff", "#0a0606", { outline: 0.16, outlineStyle: "ink", frame: 1.05, frameMat: "stone", glow: 0, shine: 0, border: "stoneFrame", illus: "gemheart", gemFill: "texture", facetStr: 0.55 }),
     "galaxy-silver": D_("galaxy", "#1c0e54", "#5c28c4", "#b05cff", "#0a0a0e", { outline: 0.14, outlineStyle: "ink", frame: 0.75, frameMat: "silver", glow: 0, shine: 0, border: "silverFrame", illus: "gemheart", gemFill: "texture", facetStr: 0.55 }),
     "ruby-stone": D_("heartcut", "#4b0816", "#b9283e", "#fad2cd", "#0a0606", { outline: 0.16, outlineStyle: "ink", frame: 1.05, frameMat: "stone", rough: [0.03, 6], glow: 0, shine: 0, border: "stoneFrame" , ...GEM_SHAPE , illus: "gemheart" }),
@@ -1547,6 +1551,15 @@ function elementIcon(kind, S, el, cols, t = 0, mode = "full", flash = false, see
     }
   };
   finish(D, 0); if (DS) finish(DS, thick * el.size);
+  let hcFrame = null;
+  if (kind === "heart" && el.hcMark) {
+    let x0 = 99, x1 = -99, y0 = 99, y1 = -99;
+    for (let j = 0; j < H; j += 2) for (let i = 0; i < W; i += 2) if (D[j * W + i] < 0) {
+      const lx = ((i + 0.5) / S - ox) / el.size, ly = ((j + 0.5) / S - oy) / el.size;
+      if (lx < x0) x0 = lx; if (lx > x1) x1 = lx; if (ly < y0) y0 = ly; if (ly > y1) y1 = ly;
+    }
+    hcFrame = { cx: (x0 + x1) / 2, cy: (y0 + y1) / 2, w: x1 - x0, h: y1 - y0 };
+  }
 
   const live = mode === "full" || mode === "half" || mode === "fill";
   const tt = live ? t : 0, tex = el.texture;
@@ -1665,7 +1678,7 @@ function elementIcon(kind, S, el, cols, t = 0, mode = "full", flash = false, see
         if (el.frame > 0) g = applyFrame(g, -body, X, Y, i, j, false);
         if (DS && d >= 0) g = mixc(scale3(P.deep, 0.75), scale3(P.dark, 0.9), sat((X - ox + 4) / 8));
         if (DS) g = mixc(g, scale3(P.dark, 0.6), cov(Math.abs(d) - 0.07) * (ds < 0 ? 1 : 0));
-        if (kind === "heart" && el.hcMark) g = hardcoreMark(g, q.ex, q.ey, P, S, GALAXY_TEX[tex] || tex === "aurora" || tex === "plasma");
+        if (kind === "heart" && el.hcMark) g = hardcoreMark(g, q.ex, q.ey, P, S * el.size, GALAXY_TEX[tex] || tex === "aurora" || tex === "plasma", hcFrame);
         if (flash) g = mixc(g, WHITE, 0.4);
       }
       if (mode === "container" && el.frame > 0) g = applyFrame(g, -body, X, Y, i, j, true);
@@ -1707,6 +1720,8 @@ function segDist(x, y, a, b) {
 /* The framed gem heart drawn to match the reference: mitred stone frame lit per segment, a heart-shaped
    table with a centre crease, and triangular facets joining it to the outline. Colours follow the palette. */
 const GH_AVG = GH.face.reduce((s, c) => [s[0] + c[0] / GH.face.length, s[1] + c[1] / GH.face.length, s[2] + c[2] / GH.face.length], [0, 0, 0]);
+const GH_FRAME = (() => { const xs = GH.gem.map(p => p[0] - 4.5), ys = GH.gem.map(p => p[1] - 4.49);
+  return { cx: (Math.min(...xs) + Math.max(...xs)) / 2, cy: (Math.min(...ys) + Math.max(...ys)) / 2, w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) }; })();
 function gemHeartIcon(S, el, cols, t, mode, flash, seed) {
   const img = newImg(S, 9, 9), cov = covf(S), W = 9 * S, P = elPal(el, cols, "heart"), sz = el.size;
   const ox = 4.5 + el.posX, oy = 4.49 + el.posY;
@@ -1766,7 +1781,7 @@ function gemHeartIcon(S, el, cols, t, mode, flash, seed) {
       let ld = 9; for (let k = 0; k < F.p.length; k++) ld = Math.min(ld, segDist(x, y, F.p[k], F.p[(k + 1) % F.p.length]));
       g = mixc(g, mixc(c3, WHITE, 0.3), sstep(0.045, 0.0, ld * sz) * (F.table ? 0.45 : 0.2) * (texFill ? fs : 1));   // facet edges
       g = scale3(g, 1 - 0.35 * sstep(0.2, 0, -dG) * (el.frameLight ?? 0));                   // shade under the frame lip
-      if (el.hcMark && mode !== "container") g = hardcoreMark(g, x - 4.5, y - 4.49, P, S, texFill || true);
+      if (el.hcMark && mode !== "container") g = hardcoreMark(g, x - 4.5, y - 4.49, P, S * sz, texFill || true, GH_FRAME);
       if (mode === "container") g = texFill ? mixc(emptyC, scale3(g, 0.18), 0.3) : mixc(emptyC, scale3(g, 0.35), 0.45);
       gemC = g;
     }
@@ -1997,19 +2012,23 @@ UI_STYLES.celestial = (kind, S, el, cols, t, mode, flash, seed) => {
 
 /* Hardcore mark (vanilla's hardcore hearts): a dark chevron across the heart with a lit edge above it.
    lx, ly are heart-local coordinates (base px from the heart's centre, before scaling). */
-function hardcoreMark(g, lx, ly, P, S, darkFill) {
-  // a thick chevron: dark on light hearts (as in vanilla), a raised glowing band on dark galaxy hearts
-  const cov = covf(S), A = [-2.35, -1.25], B = [0, 1.0], C = [2.35, -1.25], hw = 0.5;
-  const dd = (dy) => Math.min(segD(lx, ly + dy, A, B), segD(lx, ly + dy, C, B));
-  const band = cov(dd(0) - hw), top = cov(dd(0.5) - 0.2) * (1 - band) * 0, upper = cov(dd(hw * 0.55) - hw * 0.45) * band, lower = band * (1 - cov(dd(-hw * 0.5) - hw * 0.55));
+function hardcoreMark(g, lx, ly, P, S, darkFill, fr) {
+  // Two separate slanted ovals (vanilla hardcore hearts), angled down toward the middle with a gap between them.
+  // Placed relative to the heart's own extent (fr, in heart-local units) so they sit right on any heart shape.
+  fr = fr || { cx: 0, cy: -0.2, w: 7.6, h: 7.6 };
+  const cov = covf(S), rx = 0.175 * fr.w, ry = 0.095 * fr.h, mx = 0.205 * fr.w, my = fr.cy - 0.005 * fr.h, a = 0.7;
+  const ov = (dy, k) => Math.min(sdEllipse(lx, ly + dy, fr.cx - mx, my, rx, ry * k, a), sdEllipse(lx, ly + dy, fr.cx + mx, my, rx, ry * k, -a));
+  const band = cov(ov(0, 1));
+  const upper = cov(ov(ry * 0.55, 0.55)) * band, lower = band * (1 - cov(ov(-ry * 0.45, 0.6)));
+  const rim = cov(ov(ry * 1.15, 0.6)) * (1 - band);                       // light just above each mark
   if (darkFill) {
-    g = mixc(g, mixc(P.cloud, P.bright, 0.35), band * 0.8);          // glowing violet band
-    g = mixc(g, mixc(P.bright, WHITE, 0.55), upper * 0.75);           // bright upper edge
-    return mixc(g, scale3(P.dark, 0.5), lower * 0.75);                // shaded lower edge
+    g = mixc(g, mixc(P.bright, WHITE, 0.4), rim * 0.35);
+    g = mixc(g, mixc(P.cloud, P.bright, 0.35), band * 0.8);          // glowing violet ovals on dark galaxy hearts
+    g = mixc(g, mixc(P.bright, WHITE, 0.55), upper * 0.7);
+    return mixc(g, scale3(P.dark, 0.5), lower * 0.7);
   }
-  g = mixc(g, scale3(P.deep, 0.65), band * 0.85);
-  g = mixc(g, mixc(P.bright, WHITE, 0.3), cov(dd(0.62) - 0.17) * (1 - band) * 0.6);
-  return g;
+  g = mixc(g, mixc(P.bright, WHITE, 0.35), rim * 0.55);
+  return mixc(g, scale3(P.deep, 0.65), band * 0.85);                   // dark ovals on light hearts, as in vanilla
 }
 /* =====================================================================
    PNG encoder + pack builder
@@ -2294,7 +2313,7 @@ function makeEditor(key) {
       <div class="export-row"><button type="button" class="btn" id="ed-restart-${key}">Restart from slider shape</button>
       <button type="button" class="btn" id="ed-more-${key}">More dots</button><button type="button" class="btn" id="ed-fewer-${key}">Fewer dots</button>
       ${key === "steak" ? `<button type="button" class="btn" id="ed-bean">Use the cleaned-up bean shape</button>` : ""}
-      ${key === "heart" ? `<button type="button" class="btn" id="ed-gemheart">Use the gem-cut heart shape</button><button type="button" class="btn" id="ed-puffy">Use the puffy heart shape</button>` : ""}</div>
+      ${key === "heart" ? `<button type="button" class="btn" id="ed-gemheart">Use the gem-cut heart shape</button><button type="button" class="btn" id="ed-puffy">Use the puffy heart shape</button><button type="button" class="btn" id="ed-classic">Use the classic heart shape</button>` : ""}</div>
     </div>`;
   edState[key] = { drag: -1, fast: false };
   return box;
@@ -2368,6 +2387,16 @@ function wireEditor(key) {
     el.points = P.flatMap((p, i) => { const q = P[(i + 1) % P.length]; return [p, [+((p[0] + q[0]) / 2).toFixed(3), +((p[1] + q[1]) / 2).toFixed(3)]]; });
     changed();
   });
+  const useShape = shapeConst => {
+    const h = st.heart;
+    if (h.illus === "gemheart") {                     // the framed gem heart has a fixed outline: carry its frame and fill over
+      h.illus = ""; if (h.gemFill === "texture") h.texture = h.texture || "galaxy";
+      Object.assign(h, { frame: 0.95, outline: 0.2, outlineStyle: "ink", border: h.frameMat + "Frame", glow: 0 });
+    }
+    Object.assign(h, shapeConst, { custom: false, facets: 0, posX: 0, tilt: 0 });
+    syncInputs(); changed();
+  };
+  if (key === "heart") $("ed-classic").addEventListener("click", () => useShape(CLASSIC_SHAPE));
   if (key === "heart") $("ed-puffy").addEventListener("click", () => {
     const h = st.heart;
     if (h.illus === "gemheart") {                     // the framed gem heart has a fixed outline: carry its frame and fill over
