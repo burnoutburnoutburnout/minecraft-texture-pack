@@ -1249,7 +1249,7 @@ const EL_BORDER_KEYS = ["outline", "rough", "wave", "facets", "double", "thick",
   "bevel", "sticker", "feather", "drop", "waveType", "frame", "frameMat"];
 
 const EL_COMMON = {
-  design: "galaxy", texture: "galaxy", illus: "", uiStyle: "", hardcore: "world", frameLight: 0, animFps: "smooth", motion: "random", shoot: 2, gemFill: "facets", facetStr: 0.6, stars: 1, texScale: 1, texStrength: 1, speed: 2, glow: 0.32,
+  design: "galaxy", texture: "galaxy", illus: "", uiStyle: "", heartShape: "", hardcore: "world", frameLight: 0, animFps: "smooth", motion: "random", shoot: 2, gemFill: "facets", facetStr: 0.6, stars: 1, texScale: 1, texStrength: 1, speed: 2, glow: 0.32,
   border: "clean", outline: 0.5, rough: [0, 4], wave: [0, 0], facets: 0, double: false, thick: 0,
   outlineStyle: "solid", glowOut: 0, glowCol: "main", ring: 0, dash: 0, stitch: 0, bevel: 0, sticker: 0, feather: 0, drop: 0, waveType: "sine", frame: 0, frameMat: "stone",
   posX: 0, posY: 0, size: 1, tilt: 0, custom: false, points: [], smooth: 0.85,
@@ -1269,8 +1269,15 @@ const GEM_HEART = [[4.5, 1.75], [5.3, 1.0], [6.6, 0.6], [7.9, 0.85], [8.6, 1.7],
 const GEM_SHAPE = { custom: true, points: GEM_HEART, smooth: 0.08 };
 /* puffy classic heart: shape fitted to a reference hunger bar's hearts (wide lobes, shallow notch, short point) */
 const PUFFY_SHAPE = {w:  0.908,  h:  1.057,  round:  0.589,  tip:  0.849,  cleft:  -0.381,  size:  1.114,  posY:  0.115};
-/* classic heart: shape fitted to a second reference (flatter top, straighter sides, longer sharp point) */
-const CLASSIC_SHAPE = { w: 0.915, h: 1.204, round: 0.18, tip: 0.731, cleft: -0.52, size: 1.088, posY: 0.669 };
+/* classic heart: fitted to the blue reference hearts (wide and squat, broad lobes, shallow notch, short point) */
+const CLASSIC_SHAPE = { w: 1.09, h: 1.215, round: 0.432, tip: 0.703, cleft: -0.514, size: 0.903, posY: 0.505 };
+/* heart shapes you can pick in the Hearts shape card */
+const HEART_SHAPES = {
+  standard: { label: "Standard", set: { w: 1, h: 1, round: 0, tip: 1, cleft: 0, size: 1, posY: 0, custom: false } },
+  classic: { label: "Classic", set: Object.assign({ custom: false }, CLASSIC_SHAPE) },
+  puffy: { label: "Puffy", set: Object.assign({ custom: false }, PUFFY_SHAPE) },
+  gemcut: { label: "Gem-cut", set: { custom: true, points: GEM_HEART, smooth: 0.08, w: 1, h: 1, round: 0, tip: 1, cleft: 0, size: 1, posY: 0 } },
+};
 const D_ = (texture, c1, c2, c3, outlineCol, extra = {}) => Object.assign({ texture, c1, c2, c3, outlineCol }, extra);
 const EL_DESIGNS = {
   heart: {
@@ -1286,10 +1293,10 @@ const EL_DESIGNS = {
     plasma: D_("plasma", "#1a0040", "#ff2fa0", "#ffe14d", "#0a0018"),
     marble: D_("marble", "#3a1c4a", "#e9dff2", "#ffffff", "#1c0d24", { glow: 0, shine: 0.35 }),
     aurora: D_("aurora", "#04122a", "#22e0a0", "#a070ff", "#020a18"),
-    puffy: D_("galaxy", "#1c0e54", "#5c28c4", "#b05cff", "#05030c", Object.assign({}, PUFFY_SHAPE, { outline: 0.7, shine: 0.75, shineSize: 0.6, shineX: -1.6, shineY: -1.7, glow: 0.08, shade: 0.35, falloff: 1.1 })),
-    "puffy-obsidian": D_("galaxy", "#1c0e54", "#5c28c4", "#b05cff", "#05030c", Object.assign({}, PUFFY_SHAPE, { outline: 0.2, outlineStyle: "ink", frame: 0.95, frameMat: "obsidian", border: "obsidianFrame", shine: 0.6, shineSize: 0.55, shineX: -1.35, shineY: -1.45, glow: 0 })),
-    classic: D_("galaxy", "#1c0e54", "#5c28c4", "#b05cff", "#05030c", Object.assign({}, CLASSIC_SHAPE, { outline: 0.55, shine: 0.6, shineSize: 0.55, shineX: -1.7, shineY: -2.6, glow: 0.08, shade: 0.35, falloff: 1.1 })),
-    "classic-obsidian": D_("galaxy", "#1c0e54", "#5c28c4", "#b05cff", "#05030c", Object.assign({}, CLASSIC_SHAPE, { outline: 0.2, outlineStyle: "ink", frame: 0.95, frameMat: "obsidian", border: "obsidianFrame", shine: 0.5, shineSize: 0.5, shineX: -1.5, shineY: -2.3, glow: 0 })),
+    puffy: D_("galaxy", "#1c0e54", "#5c28c4", "#b05cff", "#05030c", Object.assign({}, PUFFY_SHAPE, { outline: 0.7, shine: 0.75, shineSize: 0.6, shineX: -1.6, shineY: -1.7, glow: 0.08, shade: 0.35, falloff: 1.1 , heartShape: "classic" , heartShape: "puffy" })),
+    "puffy-obsidian": D_("galaxy", "#1c0e54", "#5c28c4", "#b05cff", "#05030c", Object.assign({}, PUFFY_SHAPE, { outline: 0.2, outlineStyle: "ink", frame: 0.95, frameMat: "obsidian", border: "obsidianFrame", shine: 0.6, shineSize: 0.55, shineX: -1.35, shineY: -1.45, glow: 0 , heartShape: "puffy" })),
+    classic: D_("galaxy", "#1c0e54", "#5c28c4", "#b05cff", "#05030c", Object.assign({}, CLASSIC_SHAPE, { outline: 0.55, shine: 0.6, shineSize: 0.55, shineX: -1.8, shineY: -1.9, glow: 0.08, shade: 0.35, falloff: 1.1 })),
+    "classic-obsidian": D_("galaxy", "#1c0e54", "#5c28c4", "#b05cff", "#05030c", Object.assign({}, CLASSIC_SHAPE, { outline: 0.2, outlineStyle: "ink", frame: 0.95, frameMat: "obsidian", border: "obsidianFrame", shine: 0.5, shineSize: 0.5, shineX: -1.6, shineY: -1.7, glow: 0 , heartShape: "classic" })),
     "galaxy-stone": D_("galaxy", "#1c0e54", "#5c28c4", "#b05cff", "#0a0606", { outline: 0.16, outlineStyle: "ink", frame: 1.05, frameMat: "stone", glow: 0, shine: 0, border: "stoneFrame", illus: "gemheart", gemFill: "texture", facetStr: 0.55 }),
     "galaxy-silver": D_("galaxy", "#1c0e54", "#5c28c4", "#b05cff", "#0a0a0e", { outline: 0.14, outlineStyle: "ink", frame: 0.75, frameMat: "silver", glow: 0, shine: 0, border: "silverFrame", illus: "gemheart", gemFill: "texture", facetStr: 0.55 }),
     "ruby-stone": D_("heartcut", "#4b0816", "#b9283e", "#fad2cd", "#0a0606", { outline: 0.16, outlineStyle: "ink", frame: 1.05, frameMat: "stone", rough: [0.03, 6], glow: 0, shine: 0, border: "stoneFrame" , ...GEM_SHAPE , illus: "gemheart" }),
@@ -2017,10 +2024,10 @@ function hardcoreMark(g, lx, ly, P, S, darkFill, fr) {
   // outer part of the heart down toward the middle, with a gap between them. Positions measured from a reference,
   // as fractions of the heart's own extent (fr, heart-local units).
   fr = fr || { cx: 0, cy: -0.2, w: 7.6, h: 7.6 };
-  const top = fr.cy - fr.h / 2, hw = 0.07 * fr.w;
+  const top = fr.cy - fr.h / 2, hw = 0.056 * fr.w;
   let d = 9;
   for (const s of [-1, 1]) {
-    const ax = fr.cx + s * 0.33 * fr.w, ay = top + 0.34 * fr.h, bx = fr.cx + s * 0.11 * fr.w, by = top + 0.56 * fr.h;
+    const ax = fr.cx + s * 0.3 * fr.w, ay = top + 0.36 * fr.h, bx = fr.cx + s * 0.125 * fr.w, by = top + 0.54 * fr.h;
     const ex = bx - ax, ey = by - ay, q = sat(((lx - ax) * ex + (ly - ay) * ey) / (ex * ex + ey * ey));
     const w = hw * (1 - 0.25 * q);                                           // a little thinner toward the middle
     d = Math.min(d, Math.hypot(lx - ax - ex * q, ly - ay - ey * q) - w);
@@ -2229,7 +2236,7 @@ function elSections(key, kind, name, cls) {
     { id: key + "-texture", tab: key, title: name + " texture", cls, chips: "textures-" + key, groups: [{ controls: texCtl }] },
     { id: key + "-border", tab: key, title: name + " border", cls, chips: "borders-" + key,
       hint: kind !== "bar" ? "Facets above 0 cut the edge into flat sides." : null, groups: [{ controls: borderCtl }] },
-    { id: key + "-shape", tab: key, title: name + " shape", cls, editor: kind !== "bar" ? key : null,
+    { id: key + "-shape", tab: key, title: name + " shape", cls, editor: kind !== "bar" ? key : null, chips: kind === "heart" ? [["shapes-heart", "Pick a heart shape"]] : null,
       hint: kind !== "bar" ? "Use the sliders, or switch to Draw my own and drag the dots. The dashed square is the edge of the icon."
         : "The game shows as much of the fill as you have XP, so the shape runs along the whole bar.", groups: shapeGroups },
     { id: key + "-light", tab: key, title: name + " lighting", cls, groups: [{ controls: lightCtl }, { label: "Shine", controls: shineCtl }] },
@@ -2312,7 +2319,7 @@ function makeEditor(key) {
       <div class="export-row"><button type="button" class="btn" id="ed-restart-${key}">Restart from slider shape</button>
       <button type="button" class="btn" id="ed-more-${key}">More dots</button><button type="button" class="btn" id="ed-fewer-${key}">Fewer dots</button>
       ${key === "steak" ? `<button type="button" class="btn" id="ed-bean">Use the cleaned-up bean shape</button>` : ""}
-      ${key === "heart" ? `<button type="button" class="btn" id="ed-gemheart">Use the gem-cut heart shape</button><button type="button" class="btn" id="ed-puffy">Use the puffy heart shape</button><button type="button" class="btn" id="ed-classic">Use the classic heart shape</button>` : ""}</div>
+      ${key === "heart" ? `<button type="button" class="btn" id="ed-gemheart" hidden>Use the gem-cut heart shape</button><button type="button" class="btn" id="ed-puffy" hidden>Use the puffy heart shape</button><button type="button" class="btn" id="ed-classic" hidden>Use the classic heart shape</button>` : ""}</div>
     </div>`;
   edState[key] = { drag: -1, fast: false };
   return box;
@@ -2573,6 +2580,17 @@ for (const [key, kind] of [["heart", "heart"], ["armor", "armor"], ["xp", "bar"]
       else Object.assign(st[key], elBorderPreset(n), { illus: "" });
     }, sel: () => st[key].border };
 }
+chipSets["shapes-heart"] = { tab: "heart", kind: "heart", names: Object.keys(HEART_SHAPES), label: n => HEART_SHAPES[n].label,
+  render: n => elThumb("heart", Object.assign(clone(st.heart), { illus: "" }, clone(HEART_SHAPES[n].set), { posX: 0, tilt: 0, facets: 0 })),
+  pick: n => {
+    const h = st.heart;
+    if (h.illus === "gemheart") {                     // keep the framed look: carry the frame and galaxy fill over to the built heart
+      h.illus = ""; if (h.gemFill === "texture") h.texture = h.texture || "galaxy";
+      Object.assign(h, { frame: 0.95, outline: 0.2, outlineStyle: "ink", border: h.frameMat + "Frame", glow: 0 });
+    }
+    Object.assign(h, clone(HEART_SHAPES[n].set), { posX: 0, tilt: 0, facets: 0, heartShape: n });
+  },
+  sel: () => st.heart.illus === "gemheart" ? "gemcut" : st.heart.heartShape || "" };
 const thumbs = [];
 for (const [set, cfg] of Object.entries(chipSets)) {
   for (const name of cfg.names) {
