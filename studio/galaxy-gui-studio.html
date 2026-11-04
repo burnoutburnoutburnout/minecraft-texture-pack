@@ -1249,7 +1249,7 @@ const EL_BORDER_KEYS = ["outline", "rough", "wave", "facets", "double", "thick",
   "bevel", "sticker", "feather", "drop", "waveType", "frame", "frameMat"];
 
 const EL_COMMON = {
-  design: "galaxy", texture: "galaxy", illus: "", uiStyle: "", frameLight: 0, animFps: "smooth", motion: "random", shoot: 2, gemFill: "facets", facetStr: 0.6, stars: 1, texScale: 1, texStrength: 1, speed: 2, glow: 0.32,
+  design: "galaxy", texture: "galaxy", illus: "", uiStyle: "", hardcore: "world", frameLight: 0, animFps: "smooth", motion: "random", shoot: 2, gemFill: "facets", facetStr: 0.6, stars: 1, texScale: 1, texStrength: 1, speed: 2, glow: 0.32,
   border: "clean", outline: 0.5, rough: [0, 4], wave: [0, 0], facets: 0, double: false, thick: 0,
   outlineStyle: "solid", glowOut: 0, glowCol: "main", ring: 0, dash: 0, stitch: 0, bevel: 0, sticker: 0, feather: 0, drop: 0, waveType: "sine", frame: 0, frameMat: "stone",
   posX: 0, posY: 0, size: 1, tilt: 0, custom: false, points: [], smooth: 0.85,
@@ -1267,6 +1267,8 @@ const EL_DEFAULTS = {
 const GEM_HEART = [[4.5, 1.75], [5.3, 1.0], [6.6, 0.6], [7.9, 0.85], [8.6, 1.7], [8.7, 3.1], [8.2, 4.6], [6.6, 6.5], [4.5, 8.5],
   [2.4, 6.5], [0.8, 4.6], [0.3, 3.1], [0.4, 1.7], [1.1, 0.85], [2.4, 0.6], [3.7, 1.0]];
 const GEM_SHAPE = { custom: true, points: GEM_HEART, smooth: 0.08 };
+/* puffy classic heart: shape fitted to a reference hunger bar's hearts (wide lobes, shallow notch, short point) */
+const PUFFY_SHAPE = {w:  0.908,  h:  1.057,  round:  0.589,  tip:  0.849,  cleft:  -0.381,  size:  1.114,  posY:  0.115};
 const D_ = (texture, c1, c2, c3, outlineCol, extra = {}) => Object.assign({ texture, c1, c2, c3, outlineCol }, extra);
 const EL_DESIGNS = {
   heart: {
@@ -1282,6 +1284,8 @@ const EL_DESIGNS = {
     plasma: D_("plasma", "#1a0040", "#ff2fa0", "#ffe14d", "#0a0018"),
     marble: D_("marble", "#3a1c4a", "#e9dff2", "#ffffff", "#1c0d24", { glow: 0, shine: 0.35 }),
     aurora: D_("aurora", "#04122a", "#22e0a0", "#a070ff", "#020a18"),
+    puffy: D_("galaxy", "#1c0e54", "#5c28c4", "#b05cff", "#05030c", Object.assign({}, PUFFY_SHAPE, { outline: 0.7, shine: 0.75, shineSize: 0.6, shineX: -1.6, shineY: -1.7, glow: 0.08, shade: 0.35, falloff: 1.1 })),
+    "puffy-obsidian": D_("galaxy", "#1c0e54", "#5c28c4", "#b05cff", "#05030c", Object.assign({}, PUFFY_SHAPE, { outline: 0.2, outlineStyle: "ink", frame: 0.95, frameMat: "obsidian", border: "obsidianFrame", shine: 0.6, shineSize: 0.55, shineX: -1.35, shineY: -1.45, glow: 0 })),
     "galaxy-stone": D_("galaxy", "#1c0e54", "#5c28c4", "#b05cff", "#0a0606", { outline: 0.16, outlineStyle: "ink", frame: 1.05, frameMat: "stone", glow: 0, shine: 0, border: "stoneFrame", illus: "gemheart", gemFill: "texture", facetStr: 0.55 }),
     "galaxy-silver": D_("galaxy", "#1c0e54", "#5c28c4", "#b05cff", "#0a0a0e", { outline: 0.14, outlineStyle: "ink", frame: 0.75, frameMat: "silver", glow: 0, shine: 0, border: "silverFrame", illus: "gemheart", gemFill: "texture", facetStr: 0.55 }),
     "ruby-stone": D_("heartcut", "#4b0816", "#b9283e", "#fad2cd", "#0a0606", { outline: 0.16, outlineStyle: "ink", frame: 1.05, frameMat: "stone", rough: [0.03, 6], glow: 0, shine: 0, border: "stoneFrame" , ...GEM_SHAPE , illus: "gemheart" }),
@@ -1661,6 +1665,7 @@ function elementIcon(kind, S, el, cols, t = 0, mode = "full", flash = false, see
         if (el.frame > 0) g = applyFrame(g, -body, X, Y, i, j, false);
         if (DS && d >= 0) g = mixc(scale3(P.deep, 0.75), scale3(P.dark, 0.9), sat((X - ox + 4) / 8));
         if (DS) g = mixc(g, scale3(P.dark, 0.6), cov(Math.abs(d) - 0.07) * (ds < 0 ? 1 : 0));
+        if (kind === "heart" && el.hcMark) g = hardcoreMark(g, q.ex, q.ey, P, S, GALAXY_TEX[tex] || tex === "aurora" || tex === "plasma");
         if (flash) g = mixc(g, WHITE, 0.4);
       }
       if (mode === "container" && el.frame > 0) g = applyFrame(g, -body, X, Y, i, j, true);
@@ -1761,6 +1766,7 @@ function gemHeartIcon(S, el, cols, t, mode, flash, seed) {
       let ld = 9; for (let k = 0; k < F.p.length; k++) ld = Math.min(ld, segDist(x, y, F.p[k], F.p[(k + 1) % F.p.length]));
       g = mixc(g, mixc(c3, WHITE, 0.3), sstep(0.045, 0.0, ld * sz) * (F.table ? 0.45 : 0.2) * (texFill ? fs : 1));   // facet edges
       g = scale3(g, 1 - 0.35 * sstep(0.2, 0, -dG) * (el.frameLight ?? 0));                   // shade under the frame lip
+      if (el.hcMark && mode !== "container") g = hardcoreMark(g, x - 4.5, y - 4.49, P, S, texFill || true);
       if (mode === "container") g = texFill ? mixc(emptyC, scale3(g, 0.18), 0.3) : mixc(emptyC, scale3(g, 0.35), 0.45);
       gemC = g;
     }
@@ -1988,6 +1994,23 @@ UI_STYLES.celestial = (kind, S, el, cols, t, mode, flash, seed) => {
   }
   return toRGBA(img);
 };
+
+/* Hardcore mark (vanilla's hardcore hearts): a dark chevron across the heart with a lit edge above it.
+   lx, ly are heart-local coordinates (base px from the heart's centre, before scaling). */
+function hardcoreMark(g, lx, ly, P, S, darkFill) {
+  // a thick chevron: dark on light hearts (as in vanilla), a raised glowing band on dark galaxy hearts
+  const cov = covf(S), A = [-2.35, -1.25], B = [0, 1.0], C = [2.35, -1.25], hw = 0.5;
+  const dd = (dy) => Math.min(segD(lx, ly + dy, A, B), segD(lx, ly + dy, C, B));
+  const band = cov(dd(0) - hw), top = cov(dd(0.5) - 0.2) * (1 - band) * 0, upper = cov(dd(hw * 0.55) - hw * 0.45) * band, lower = band * (1 - cov(dd(-hw * 0.5) - hw * 0.55));
+  if (darkFill) {
+    g = mixc(g, mixc(P.cloud, P.bright, 0.35), band * 0.8);          // glowing violet band
+    g = mixc(g, mixc(P.bright, WHITE, 0.55), upper * 0.75);           // bright upper edge
+    return mixc(g, scale3(P.dark, 0.5), lower * 0.75);                // shaded lower edge
+  }
+  g = mixc(g, scale3(P.deep, 0.65), band * 0.85);
+  g = mixc(g, mixc(P.bright, WHITE, 0.3), cov(dd(0.62) - 0.17) * (1 - band) * 0.6);
+  return g;
+}
 /* =====================================================================
    PNG encoder + pack builder
    ===================================================================== */
@@ -2053,7 +2076,7 @@ function drawMiniHud(cv, s, sc) {
    Settings
    ===================================================================== */
 const DEFAULTS = {
-  tab: "steak",
+  tab: "steak", pvHardcore: false,
   design: "grill", shape: designShape("grill"),
   steakCol: { meat: "#703624", dark: "#422015", rim: "#a65035", side: "#401f15", burn: "#100805", linked: true },
   hungerTint: "#64962e",
@@ -2098,7 +2121,12 @@ const getP = path => path.split(".").reduce((o, k) => o[k], st);
 const setP = (path, v) => { const ks = path.split("."), last = ks.pop(); ks.reduce((o, k) => o[k], st)[last] = v; };
 
 /* element renderers bound to the current settings */
-const HRT = (S, t, mode = "full", flash = false, cols = st.heart, seed = 0) => elementIcon("heart", S, st.heart, cols, t, mode, flash, seed);
+/* Minecraft has a separate row of heart icons for hardcore worlds. HEART_ROW says which row is being drawn,
+   and the hardcore mark is added when the setting asks for it on that row. */
+let HEART_ROW = "normal";
+const heartMarked = () => { const m = st.heart.hardcore || "world"; return m === "always" || (m === "world" && HEART_ROW === "hardcore"); };
+const HRT = (S, t, mode = "full", flash = false, cols = st.heart, seed = 0) =>
+  elementIcon("heart", S, heartMarked() ? Object.assign({}, st.heart, { hcMark: true }) : st.heart, cols, t, mode, flash, seed);
 /* the half-armor icon is shown on its own in game, so it is the full piece on the left and the empty slot on the right */
 function halfArmor(S) {
   const f = elementIcon("armor", S, st.armor, st.armor, 0, "full"), e = elementIcon("armor", S, st.armor, st.armor, 0, "empty");
@@ -2152,7 +2180,8 @@ function elSections(key, kind, name, cls) {
     SEL(p("glowCol"), "Glow colour", [["main", "Highlight colour"], ["white", "White"], ["outline", "Outline colour"]]),
     R(p("sticker"), "Sticker border", 0, 0.8, 0.01), R(p("ring"), "Outer ring gap", 0, 0.8, 0.01), R(p("drop"), "Drop shadow", 0, 1, 0.01));
   borderCtl.push(TG(p("double"), "Inner highlight line"));
-  const texCtl = [...(kind === "heart" ? [SEL(p("illus"), "Heart style", [["", "Built from the cards below"], ["gemheart", "Framed gem heart (picture match)"]]),
+  const texCtl = [...(kind === "heart" ? [SEL(p("hardcore"), "Hardcore mark", [["world", "In hardcore worlds (like vanilla)"], ["always", "On all hearts"], ["off", "Never"]]),
+      TG("pvHardcore", "Preview as a hardcore world"), SEL(p("illus"), "Heart style", [["", "Built from the cards below"], ["gemheart", "Framed gem heart (picture match)"]]),
       SEL(p("gemFill"), "Gem fill (framed gem heart)", [["facets", "Cut ruby facets"], ["texture", "Selected texture"]]),
       R(p("facetStr"), "Facet shading on the texture", 0, 1, 0.01)] : []),
     R(p("stars"), "Stars", 0, 3, 0.05), R(p("texScale"), "Texture size", 0.3, 3, 0.01), R(p("texStrength"), "Texture strength", 0, 1, 0.01), R(p("glow"), "Edge glow", 0, 1, 0.01)];
@@ -2265,7 +2294,7 @@ function makeEditor(key) {
       <div class="export-row"><button type="button" class="btn" id="ed-restart-${key}">Restart from slider shape</button>
       <button type="button" class="btn" id="ed-more-${key}">More dots</button><button type="button" class="btn" id="ed-fewer-${key}">Fewer dots</button>
       ${key === "steak" ? `<button type="button" class="btn" id="ed-bean">Use the cleaned-up bean shape</button>` : ""}
-      ${key === "heart" ? `<button type="button" class="btn" id="ed-gemheart">Use the gem-cut heart shape</button>` : ""}</div>
+      ${key === "heart" ? `<button type="button" class="btn" id="ed-gemheart">Use the gem-cut heart shape</button><button type="button" class="btn" id="ed-puffy">Use the puffy heart shape</button>` : ""}</div>
     </div>`;
   edState[key] = { drag: -1, fast: false };
   return box;
@@ -2338,6 +2367,15 @@ function wireEditor(key) {
     const el = E.el(), P = el.points; if (P.length >= 48) return;
     el.points = P.flatMap((p, i) => { const q = P[(i + 1) % P.length]; return [p, [+((p[0] + q[0]) / 2).toFixed(3), +((p[1] + q[1]) / 2).toFixed(3)]]; });
     changed();
+  });
+  if (key === "heart") $("ed-puffy").addEventListener("click", () => {
+    const h = st.heart;
+    if (h.illus === "gemheart") {                     // the framed gem heart has a fixed outline: carry its frame and fill over
+      h.illus = ""; if (h.gemFill === "texture") h.texture = h.texture || "galaxy";
+      Object.assign(h, { frame: 0.95, outline: 0.2, outlineStyle: "ink", border: h.frameMat + "Frame", glow: 0 });
+    }
+    Object.assign(h, PUFFY_SHAPE, { custom: false, facets: 0, posX: 0, tilt: 0 });
+    syncInputs(); changed();
   });
   if (key === "heart") $("ed-gemheart").addEventListener("click", () => {
     Object.assign(st.heart, { custom: true, points: clone(GEM_HEART), smooth: 0.08, posX: 0, posY: 0, size: 1, facets: 0 });
@@ -2630,6 +2668,10 @@ function toCanvas(rgba) { const c = document.createElement("canvas"); c.width = 
 let pv = null;
 function drawInto(id, rgba) { const cv = $(id), g = cv.getContext("2d"); g.clearRect(0, 0, cv.width, cv.height); g.drawImage(toCanvas(rgba), 0, 0); }
 function buildPreview() {
+  HEART_ROW = st.pvHardcore ? "hardcore" : "normal";
+  try { buildPreviewInner(); } finally { HEART_ROW = "normal"; }
+}
+function buildPreviewInner() {
   const hearts = [], xp = [];
   for (let f = 0; f < HEART_FRAMES; f++) hearts.push([toCanvas(HRT(PS, f / HEART_FRAMES, "full")), toCanvas(HRT(PS, f / HEART_FRAMES, "half"))]);
   for (let f = 0; f < XP_FRAMES; f++) xp.push(toCanvas(BAR(PS, f / XP_FRAMES, "fill")));
@@ -2718,13 +2760,14 @@ async function buildPack(progress) {
   const jobs = [];
   jobs.push(() => put(crosshairIcon(S, st.cross), 0, 0));
   for (const row of [0, 45]) {
-    jobs.push(() => { put(HRT(S, 0, "container"), 16, row); put(HRT(S, 0, "container", true), 25, row); put(HRT(S, 0, "container"), 34, row); put(HRT(S, 0, "container", true), 43, row); });
+    const hr = row === 45 ? "hardcore" : "normal", J = f => jobs.push(() => { HEART_ROW = hr; try { f(); } finally { HEART_ROW = "normal"; } });
+    J(() => { put(HRT(S, 0, "container"), 16, row); put(HRT(S, 0, "container", true), 25, row); put(HRT(S, 0, "container"), 34, row); put(HRT(S, 0, "container", true), 43, row); });
     [[st.heart, 0], [st.poison, 2], [st.wither, 3]].forEach(([cols, sd], n) => {
       const x = 52 + n * 36;
-      jobs.push(() => { put(HRT(S, 0, "full", false, cols, sd), x, row); put(HRT(S, 0, "half", false, cols, sd), x + 9, row); });
-      jobs.push(() => { put(HRT(S, 0, "full", true, cols, sd), x + 18, row); put(HRT(S, 0, "half", true, cols, sd), x + 27, row); });
+      J(() => { put(HRT(S, 0, "full", false, cols, sd), x, row); put(HRT(S, 0, "half", false, cols, sd), x + 9, row); });
+      J(() => { put(HRT(S, 0, "full", true, cols, sd), x + 18, row); put(HRT(S, 0, "half", true, cols, sd), x + 27, row); });
     });
-    jobs.push(() => { put(HRT(S, 0, "full", false, st.gold, 4), 160, row); put(HRT(S, 0, "half", false, st.gold, 4), 169, row); });
+    J(() => { put(HRT(S, 0, "full", false, st.gold, 4), 160, row); put(HRT(S, 0, "half", false, st.gold, 4), 169, row); });
   }
   jobs.push(() => { for (const [k, x] of [["empty", 16], ["half", 25], ["full", 34]]) put(ARM(S, k), x, 9); });
   jobs.push(() => { put(HRT(S, 0, "container"), 52, 9); put(HRT(S, 0, "full"), 88, 9); put(HRT(S, 0, "half"), 97, 9); });
@@ -2738,14 +2781,21 @@ async function buildPack(progress) {
   jobs.push(() => { for (let l = 0; l < 6; l++) put(pingIcon(S, l), 0, 176 + l * 8); });
 
   const hw = 18 * S, hh = 9 * S, hearts = new Uint8ClampedArray(hw * hh * HEART_FRAMES * 4);
-  for (let f = 0; f < HEART_FRAMES; f++) jobs.push(() => {
-    const full = HRT(S, f / HEART_FRAMES, "full"), half = HRT(S, f / HEART_FRAMES, "half");
-    for (let y = 0; y < hh; y++) {
-      const o = ((f * hh + y) * hw) * 4;
-      hearts.set(full.data.subarray(y * full.w * 4, (y + 1) * full.w * 4), o);
-      hearts.set(half.data.subarray(y * half.w * 4, (y + 1) * half.w * 4), o + full.w * 4);
-    }
+  // hardcore hearts get their own animation strip when the two rows look different
+  const hcSeparate = (st.heart.hardcore || "world") === "world", heartsHC = hcSeparate ? new Uint8ClampedArray(hearts.length) : null;
+  const strip = (buf, row) => f => jobs.push(() => {
+    HEART_ROW = row;
+    try {
+      const full = HRT(S, f / HEART_FRAMES, "full"), half = HRT(S, f / HEART_FRAMES, "half");
+      for (let y = 0; y < hh; y++) {
+        const o = ((f * hh + y) * hw) * 4;
+        buf.set(full.data.subarray(y * full.w * 4, (y + 1) * full.w * 4), o);
+        buf.set(half.data.subarray(y * half.w * 4, (y + 1) * half.w * 4), o + full.w * 4);
+      }
+    } finally { HEART_ROW = "normal"; }
   });
+  for (let f = 0; f < HEART_FRAMES; f++) strip(hearts, "normal")(f);
+  if (hcSeparate) for (let f = 0; f < HEART_FRAMES; f++) strip(heartsHC, "hardcore")(f);
   const xw = 182 * S, xh = 5 * S, xp = new Uint8ClampedArray(xw * xh * XP_FRAMES * 4);
   for (let f = 0; f < XP_FRAMES; f++) jobs.push(() => xp.set(BAR(S, f / XP_FRAMES, "fill").data, f * xw * xh * 4));
 
@@ -2761,13 +2811,14 @@ async function buildPack(progress) {
   zip.file("assets/minecraft/textures/gui/icons.png", encodePNG(icons, Wd, Wd));
   progress((jobs.length + 2) / total, "Compressing heart animation…"); await pause();
   zip.file(anim + "hearts.png", encodePNG(hearts, hw, hh * HEART_FRAMES));
+  if (hcSeparate) zip.file(anim + "hearts_hardcore.png", encodePNG(heartsHC, hw, hh * HEART_FRAMES));
   progress((jobs.length + 3) / total, "Compressing XP animation…"); await pause();
   zip.file(anim + "xp.png", encodePNG(xp, xw, xh * XP_FRAMES));
   // interpolate=true (OptiFine 1.8.9 HD U L5 or newer) blends frames on every rendered frame instead of stepping each tick
   const props = (src, x, y, w, h, dur, smooth) => `from=./${src}\nto=textures/gui/icons.png\nx=${x}\ny=${y}\nw=${w}\nh=${h}\nduration=${dur}\n`
     + (smooth ? "interpolate=true\n" : "");
   zip.file(anim + "hearts.properties", props("hearts.png", 52 * S, 0, 18 * S, 9 * S, st.heart.speed, st.heart.animFps === "smooth"));
-  zip.file(anim + "hearts_hardcore.properties", props("hearts.png", 52 * S, 45 * S, 18 * S, 9 * S, st.heart.speed, st.heart.animFps === "smooth"));
+  zip.file(anim + "hearts_hardcore.properties", props(hcSeparate ? "hearts_hardcore.png" : "hearts.png", 52 * S, 45 * S, 18 * S, 9 * S, st.heart.speed, st.heart.animFps === "smooth"));
   zip.file(anim + "xp.properties", props("xp.png", 0, 69 * S, 182 * S, 5 * S, st.xp.speed, st.xp.animFps === "smooth"));
   progress(1, "Zipping…"); await pause();
   return zip.generateAsync({ type: "blob", compression: "STORE" });
