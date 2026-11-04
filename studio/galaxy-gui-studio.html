@@ -25,6 +25,7 @@
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 body {
   background: var(--bg);
   color: var(--fg);
@@ -92,6 +93,13 @@ select { background: var(--panel-2); color: var(--fg); border: 1px solid var(--l
 .vary-grid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
 .vary-grid .design canvas { width: 116px; height: 116px; }
 .vary-grid .design span { font-size: 12px; text-align: center; }
+.theme-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+.theme { appearance: none; border: 1px solid var(--line); background: var(--panel-2); color: var(--fg); border-radius: 12px; padding: 8px 8px 12px; display: grid; gap: 4px; text-align: left; cursor: pointer; font: inherit; }
+.theme canvas { border-radius: 8px; width: 100%; height: auto; }
+.theme strong { font-family: var(--font-display); font-weight: 600; font-size: 16px; padding-inline: 4px; }
+.theme span { font-size: 12px; color: var(--muted); padding-inline: 4px; }
+.theme:hover { border-color: var(--muted); }
+.theme:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .toggle { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; cursor: pointer; }
 .toggle input { width: 18px; height: 18px; accent-color: var(--meat); }
 .colors { display: flex; flex-wrap: wrap; gap: 12px; }
@@ -1241,7 +1249,7 @@ const EL_BORDER_KEYS = ["outline", "rough", "wave", "facets", "double", "thick",
   "bevel", "sticker", "feather", "drop", "waveType", "frame", "frameMat"];
 
 const EL_COMMON = {
-  design: "galaxy", texture: "galaxy", illus: "", frameLight: 0, animFps: "smooth", motion: "random", shoot: 2, gemFill: "facets", facetStr: 0.6, stars: 1, texScale: 1, texStrength: 1, speed: 2, glow: 0.32,
+  design: "galaxy", texture: "galaxy", illus: "", uiStyle: "", frameLight: 0, animFps: "smooth", motion: "random", shoot: 2, gemFill: "facets", facetStr: 0.6, stars: 1, texScale: 1, texStrength: 1, speed: 2, glow: 0.32,
   border: "clean", outline: 0.5, rough: [0, 4], wave: [0, 0], facets: 0, double: false, thick: 0,
   outlineStyle: "solid", glowOut: 0, glowCol: "main", ring: 0, dash: 0, stitch: 0, bevel: 0, sticker: 0, feather: 0, drop: 0, waveType: "sine", frame: 0, frameMat: "stone",
   posX: 0, posY: 0, size: 1, tilt: 0, custom: false, points: [], smooth: 0.85,
@@ -1506,6 +1514,7 @@ function texColor(tex, q) {
 
 /* mode: full | half | container | empty | fill | bg */
 function elementIcon(kind, S, el, cols, t = 0, mode = "full", flash = false, seed = 0) {
+  if (el.uiStyle && typeof UI_STYLES !== "undefined" && UI_STYLES[el.uiStyle]) return UI_STYLES[el.uiStyle](kind, S, el, cols, t, mode, flash, seed);
   if (kind === "heart" && el.illus === "gemheart") return gemHeartIcon(S, el, cols, t, mode, flash, seed);
   const E = ELEM[kind], W = Math.round(E.w * S), H = Math.round(E.h * S), n = W * H, cov = covf(S);
   const P = elPal(el, cols, kind), [cx, cy] = E.c, ox = cx + el.posX, oy = cy + el.posY;
@@ -1764,6 +1773,222 @@ function gemHeartIcon(S, el, cols, t, mode, flash, seed) {
   return toRGBA(img);
 }
 /* =====================================================================
+   New HUD styles for hearts, armor and the XP bar. Each is its own drawing, filled with the
+   animated galaxy. Hearts: full / half / container; armor: full / empty (half is assembled from
+   both); bars: fill / bg. The steak is never touched by these.
+   ===================================================================== */
+const UI_STYLES = {};
+const UI_LABELS = { vial: "Galaxy vials", constellation: "Constellations", mosaic: "Low-poly mosaic", rift: "Cosmic rift", celestial: "Celestial gold" };
+const hsd = (X, Y, k = 1, dy = 0) => sdHeart(4.5 + (X - 4.5) / k, 4.49 + (Y - dy - 4.49) / k) * k;
+const asd = (X, Y, k = 1) => (sdPolygon(4.5 + (X - 4.5) / k, 4.55 + (Y - 4.55) / k, ARMOR_PTS) - 0.15) * k;
+const uhash = (a, b, c) => fract(Math.sin(a * 127.1 + b * 311.7 + c * 74.7) * 43758.5453);
+function uiBase(kind, S, el, cols, t, seed, live) {
+  const E = ELEM[kind], W = Math.round(E.w * S), H = Math.round(E.h * S), P = elPal(el, cols, kind);
+  const buf = live ? starfield(S, E.w, E.h, t, P, galaxyOpts(kind, el, "galaxy", seed)) : null;
+  return { E, W, H, P, buf, cov: covf(S), img: newImg(S, E.w, E.h) };
+}
+const gal = (buf, k) => [buf[k * 3], buf[k * 3 + 1], buf[k * 3 + 2]];
+const isLive = mode => mode === "full" || mode === "half" || mode === "fill";
+const halfMask = (kind, mode, X, cov) => (kind === "heart" && mode === "half") ? cov(X - 4.5) : 1;
+const segD = (X, Y, a, b) => { const ex = b[0] - a[0], ey = b[1] - a[1], q = sat(((X - a[0]) * ex + (Y - a[1]) * ey) / (ex * ex + ey * ey)); return Math.hypot(X - a[0] - ex * q, Y - a[1] - ey * q); };
+function star4(X, Y, cx, cy, r, w) {                                      // four-point star, approx. distance
+  const dx = Math.abs(X - cx), dy = Math.abs(Y - cy);
+  return Math.min(dx / r + dy / w - 1, dx / w + dy / r - 1) * w;
+}
+
+/* 1. Galaxy vials: glass containers holding sloshing galaxy liquid */
+UI_STYLES.vial = (kind, S, el, cols, t, mode, flash, seed) => {
+  const live = isLive(mode), { W, H, P, buf, cov, img } = uiBase(kind, S, el, cols, t, seed, live);
+  const bar = kind === "bar", wall = bar ? 0.42 : 0.5;
+  const glassC = mixc(rgb(205, 196, 240), P.bright, 0.3), lineC = rgb(22, 14, 42);
+  const shape = (X, Y) => kind === "heart" ? hsd(X, Y, 0.9, 0.42) : kind === "armor" ? asd(X, Y, 0.94) : sdBox(X, Y, 91, 2.5, 90.6, 2.3, 2.3);
+  const cx = 4.5, cy = kind === "heart" ? 4.9 : 4.6;
+  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+    const k = j * W + i, X = (i + 0.5) / S, Y = (j + 0.5) / S;
+    const d = shape(X, Y), cork = kind === "heart" ? sdBox(X, Y, 4.5, 1.45, 0.62, 0.62, 0.22) : 9;
+    if (d > 0.05 && cork > 0.05) continue;
+    let c, a;
+    if (d < -wall) {
+      const lvl = !live ? (bar ? 9 : 7.7) : bar ? 1.15 + 0.12 * Math.sin(TAU * 3 * t + X * 0.22) : (kind === "heart" ? 3.0 : 2.7) + 0.15 * Math.sin(TAU * 2 * t + X * 1.2);
+      if (Y > lvl) {
+        c = live ? gal(buf, k) : scale3(P.deep, 0.55);
+        c = mixc(c, mixc(P.bright, WHITE, 0.3), sstep(0.16, 0.0, Y - lvl) * 0.7);           // bright liquid surface
+        if (live) for (let b = 0; b < (bar ? 9 : 4); b++) {                                  // rising bubbles
+          const h = uhash(b, seed, 3), bx = bar ? 4 + b * 20 + h * 8 : 2.6 + h * 3.8, kk = 1 + (b % 2);
+          const by = 8.2 - (((t * kk + h) % 1)) * (8.2 - lvl) * (bar ? 0.5 : 1) + (bar ? -3.9 : 0);
+          const rr = Math.hypot(X - bx, Y - by);
+          c = mixc(c, mixc(P.bright, WHITE, 0.6), sstep(0.2, 0.12, Math.abs(rr - 0.14)) * 0.8);
+        }
+        a = 1;
+      } else { c = mixc(glassC, P.deep, 0.55); a = 0.2; }
+    } else { c = glassC; a = 0.5; }
+    c = mixc(c, scale3(glassC, 0.55), sstep(0.08, 0, Math.abs(d + wall)) * 0.6);              // inner edge of the glass
+    const hl = bar ? sstep(0.2, 0.05, Math.abs(Y - 1.05)) * sstep(2.5, 4, X) * sstep(180, 178.5, X)
+      : sat(-sdEllipse(X, Y, cx - 2.1, cy - 0.7, 0.24, 1.5, 0.35) / 0.12);
+    c = mixc(c, WHITE, hl * 0.75); a = Math.max(a, hl * 0.75);
+    if (d > -0.14) { c = lineC; a = 1; }                                                   // outline
+    a *= cov(d);
+    if (cork < 0.05) {                                                                     // cork in the heart's notch
+      const cc = mixc(rgb(126, 82, 46), rgb(184, 132, 86), sat((1.45 - Y) / 0.9 + 0.3));
+      const ca = cov(cork); c = mixc(c, cork > -0.12 ? lineC : cc, ca); a = Math.max(a, ca);
+    }
+    if (flash) c = mixc(c, WHITE, 0.4);
+    a *= halfMask(kind, mode, X, cov);
+    if (a > 0) setPx(img, k, a, c);
+  }
+  return toRGBA(img);
+};
+
+/* 2. Constellations: shapes traced by twinkling stars joined with glowing lines */
+UI_STYLES.constellation = (kind, S, el, cols, t, mode, flash, seed) => {
+  const live = isLive(mode), { W, H, P, buf, cov, img } = uiBase(kind, S, el, cols, t, seed, live);
+  const lineC = mixc(P.bright, WHITE, 0.55);
+  if (kind === "bar") {
+    const nodes = []; for (let n = 0; n < 12; n++) nodes.push(3 + n * 16);
+    for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+      const k = j * W + i, X = (i + 0.5) / S, Y = (j + 0.5) / S, dy = Math.abs(Y - 2.5);
+      let c, a;
+      if (live) { c = gal(buf, k); a = sat((1.35 - dy) / 0.6); c = mixc(c, lineC, Math.exp(-((dy / 0.16) ** 2)) * 0.85); }
+      else { c = rgb(10, 8, 24); a = sat((1.45 - dy) / 0.6) * 0.6; c = mixc(c, scale3(lineC, 0.6), sstep(0.12, 0.05, dy) * (Math.sin(X * 2.4) > 0 ? 0.6 : 0)); a = Math.max(a, sstep(0.12, 0.05, dy) * 0.5); }
+      for (let n = 0; n < nodes.length; n++) {
+        const ds = Math.hypot(X - nodes[n], Y - 2.5); if (ds > 1.6) continue;
+        const tw = live ? 0.75 + 0.25 * Math.sin(TAU * (t * (1 + n % 3) + n * 0.37)) : 0.35;
+        const sv = (Math.exp(-((ds / 0.3) ** 2)) * 1.3 + Math.exp(-Math.abs(Y - 2.5) / 0.06) * Math.exp(-(((X - nodes[n]) / 1.2) ** 2)) * 0.6) * tw;
+        c = mixc(c, WHITE, sat(sv)); a = Math.max(a, sat(sv));
+      }
+      if (flash) c = mixc(c, WHITE, 0.4);
+      if (a > 0) setPx(img, k, sat(a), c);
+    }
+    return toRGBA(img);
+  }
+  const sd = (X, Y) => kind === "heart" ? hsd(X, Y, 0.9) : asd(X, Y, 0.9);
+  const pts = kind === "heart" ? radialPoly((x, y) => sd(x, y) + 0.15, 4.5, 4.4, 10, 6) : ARMOR_PTS.map(([x, y]) => [4.5 + (x - 4.5) * 0.88, 4.55 + (y - 4.55) * 0.88]);
+  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+    const k = j * W + i, X = (i + 0.5) / S, Y = (j + 0.5) / S, d = sd(X, Y);
+    let c = [0, 0, 0], a = 0;
+    if (d < 0.1) {
+      const soft = sat(-d / 0.35 + 0.3);
+      if (live) { c = scale3(gal(buf, k), 0.9); a = soft * 0.95; } else { c = rgb(10, 8, 22); a = soft * 0.78; }
+    }
+    let dl = 9; for (let n = 0; n < pts.length; n++) dl = Math.min(dl, segD(X, Y, pts[n], pts[(n + 1) % pts.length]));
+    const la = live ? Math.exp(-((dl / 0.08) ** 2)) * 0.95 + Math.exp(-((dl / 0.3) ** 2)) * 0.35 : Math.exp(-((dl / 0.07) ** 2)) * 0.45;
+    c = mixc(c, lineC, sat(la)); a = Math.max(a, sat(la));
+    for (let n = 0; n < pts.length; n++) {
+      const dx = X - pts[n][0], dy = Y - pts[n][1], ds = Math.hypot(dx, dy); if (ds > 1.2) continue;
+      const tw = live ? 0.7 + 0.3 * Math.sin(TAU * (t * (1 + n % 3) + n * 0.31)) : 0.35;
+      const sv = (Math.exp(-((ds / 0.2) ** 2)) * 1.4 + 0.5 * (Math.exp(-Math.abs(dx) / 0.05) * Math.exp(-((dy / 0.6) ** 2)) + Math.exp(-Math.abs(dy) / 0.05) * Math.exp(-((dx / 0.6) ** 2)))) * tw;
+      c = mixc(c, WHITE, sat(sv)); a = Math.max(a, sat(sv));
+    }
+    if (flash) c = mixc(c, WHITE, 0.4);
+    a *= halfMask(kind, mode, X, cov);
+    if (a > 0.003) setPx(img, k, a, c);
+  }
+  return toRGBA(img);
+};
+
+/* 3. Low-poly mosaic: shapes built from small shimmering galaxy triangles */
+UI_STYLES.mosaic = (kind, S, el, cols, t, mode, flash, seed) => {
+  const live = isLive(mode), { W, H, P, buf, cov, img } = uiBase(kind, S, el, cols, t, seed, live);
+  const sd = (X, Y) => kind === "heart" ? hsd(X, Y, 0.98) : kind === "armor" ? asd(X, Y, 0.98) : sdBox(X, Y, 91, 2.5, 90.7, 2.35, 1.4);
+  const s = kind === "bar" ? 2.4 : 1.75, outC = rgb(14, 8, 30), edgeC = mixc(P.bright, WHITE, 0.45);
+  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+    const k = j * W + i, X = (i + 0.5) / S, Y = (j + 0.5) / S, d = sd(X, Y);
+    if (d > 0.05) continue;
+    const v = Y / (s * 0.866), u = X / s - v * 0.5, iu = Math.floor(u), iv = Math.floor(v), fu = u - iu, fv = v - iv, tri = fu + fv < 1 ? 0 : 1;
+    const e = (tri ? Math.min(1 - fu, 1 - fv, fu + fv - 1) : Math.min(fu, fv, 1 - fu - fv)) * s * 0.866;
+    const h = uhash(iu, iv, tri + seed * 3), cu = iu + (tri ? 2 / 3 : 1 / 3), cv = iv + (tri ? 2 / 3 : 1 / 3);
+    const CX = (cu + cv * 0.5) * s, CY = cv * s * 0.866;
+    let c;
+    if (live) {
+      const ci = Math.min(W - 1, Math.max(0, Math.floor(CX * S))), cj = Math.min(H - 1, Math.max(0, Math.floor(CY * S)));
+      const b = 0.62 + 0.8 * h + 0.22 * Math.sin(TAU * (t * (1 + Math.floor(h * 3)) + h * 5));
+      c = mixc(scale3(gal(buf, cj * W + ci), b), scale3(P.cloud, b), 0.25);            // one flat colour per facet
+      c = mixc(c, edgeC, sstep(0.06, 0.015, e) * 0.14);                                 // faint seams
+    } else {
+      c = mixc(rgb(26, 20, 46), rgb(46, 38, 74), h);
+      c = mixc(c, rgb(70, 60, 104), sstep(0.06, 0.015, e) * 0.2);
+    }
+    if (d > -0.3) c = outC;
+    if (flash) c = mixc(c, WHITE, 0.4);
+    const a = cov(d) * halfMask(kind, mode, X, cov);
+    if (a > 0) setPx(img, k, a, c);
+  }
+  return toRGBA(img);
+};
+
+/* 4. Cosmic rift: a jagged, glowing tear in space with the galaxy behind it */
+UI_STYLES.rift = (kind, S, el, cols, t, mode, flash, seed) => {
+  const live = isLive(mode), { E, W, H, P, buf, cov, img } = uiBase(kind, S, el, cols, t, seed, live);
+  const bar = kind === "bar", hot = mixc(P.bright, WHITE, 0.55), glowC = mixc(P.cloud, P.bright, 0.5);
+  const base = (X, Y) => kind === "heart" ? hsd(X, Y, 0.82) : kind === "armor" ? asd(X, Y, 0.84) : Math.abs(Y - 2.5) - (1.05 + 0.5 * vfbm(X * 0.45 + 7, 3.1, 3));
+  const sd = (X, Y) => base(X, Y) + (bar ? 0.18 * vfbm(X * 1.4, Y * 2, 2) : 0.3 * vfbm(X * 1.6 + 11, Y * 1.6, 3) + 0.1 * vnoise(X * 6, Y * 6));
+  const shards = [];
+  if (live && !bar) for (let n = 0; n < 4; n++) { const th = TAU * (t + n / 4) + n; shards.push([4.5 + Math.cos(th) * 3.55, 4.5 + Math.sin(th) * 3.4, th * 1.3]); }
+  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+    const k = j * W + i, X = (i + 0.5) / S, Y = (j + 0.5) / S, d = sd(X, Y);
+    const edgeFade = sstep(0, 0.8, Math.min(X, Y, E.w - X, E.h - Y));
+    let c = glowC, a = 0;
+    if (d < 0) {
+      if (live) { c = mixc(scale3(gal(buf, k), 1.15), hot, Math.exp(d / 0.13)); a = cov(d); }
+      else { c = mixc(rgb(12, 8, 22), scale3(glowC, 0.5), Math.exp(d / 0.12) * 0.6); a = cov(d) * 0.9; }
+    }
+    if (d > 0) { const ga = (live ? 0.85 : 0.3) * Math.exp(-d / (bar ? 0.25 : 0.32)) * edgeFade; if (ga > a) { c = mixc(glowC, hot, Math.exp(-d / 0.08)); a = Math.max(a, ga); } }
+    for (const [sx, sy, r] of shards) {
+      const dx = X - sx, dy = Y - sy, rx = dx * Math.cos(r) + dy * Math.sin(r), ry = -dx * Math.sin(r) + dy * Math.cos(r);
+      const dd = Math.abs(rx) / 0.42 + Math.abs(ry) / 0.22 - 1;
+      if (dd < 0.15) { const sa = sat(-dd / 0.15 + 0.5) * edgeFade; c = mixc(c, mixc(hot, glowC, sat(0.5 + rx)), sa); a = Math.max(a, sa); }
+    }
+    if (flash) c = mixc(c, WHITE, 0.4);
+    a *= halfMask(kind, mode, X, cov);
+    if (a > 0.003) setPx(img, k, a, c);
+  }
+  return toRGBA(img);
+};
+
+/* 5. Celestial gold: gold-rimmed galaxy with a crescent moon, stars and star caps */
+UI_STYLES.celestial = (kind, S, el, cols, t, mode, flash, seed) => {
+  const live = isLive(mode), { W, H, P, buf, cov, img } = uiBase(kind, S, el, cols, t, seed, live);
+  const lc = Math.cos(225 * Math.PI / 180), ls = Math.sin(225 * Math.PI / 180), rim = 0.45, inkC = rgb(30, 16, 4);
+  const sd = (X, Y) => kind === "heart" ? hsd(X, Y, 0.84, 0.3) : kind === "armor" ? asd(X, Y, 0.9) : sdBox(X, Y, 91, 2.5, 88.6, 2.05, 1.6);
+  const orn = (X, Y) => {
+    if (kind === "heart") {
+      const moon = Math.max(Math.hypot(X - 1.95, Y - 1.5) - 0.95, -(Math.hypot(X - 2.42, Y - 1.25) - 0.8));
+      return Math.min(moon, star4(X, Y, 7.05, 1.5, 1.0, 0.3));
+    }
+    if (kind === "armor") return star4(X, Y, 4.5, 5.0, 1.15, 0.34);
+    let o = Math.min(star4(X, Y, 1.7, 2.5, 1.7, 0.5), star4(X, Y, 180.3, 2.5, 1.7, 0.5));
+    for (let n = 1; n < 10; n++) o = Math.min(o, Math.hypot(X - (2 + n * 17.8), Y - 0.62) - 0.26);
+    return o;
+  };
+  const gold = (X, Y, f, dim) => { let g = mixc(rgb(124, 72, 12), rgb(255, 228, 134), sat(0.5 + f * 0.55 + 0.18 * Math.sin((X + Y) * 3))); return dim ? mixc(g, rgb(90, 80, 70), 0.45) : g; };
+  const e = 0.03;
+  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+    const k = j * W + i, X = (i + 0.5) / S, Y = (j + 0.5) / S, d = sd(X, Y), o = orn(X, Y);
+    if (d > 0.05 && o > 0.05) continue;
+    let c = [0, 0, 0], a = 0;
+    if (d < 0.05) {
+      if (d < -rim) c = live ? gal(buf, k) : mixc(rgb(14, 12, 32), live ? WHITE : rgb(22, 18, 44), 0.2);
+      else {
+        const fx = (sd(X + e, Y) - sd(X - e, Y)) / (2 * e), fy = (sd(X, Y + e) - sd(X, Y - e)) / (2 * e);
+        c = gold(X, Y, fx * lc + fy * ls, !live);
+        c = mixc(c, inkC, sstep(-0.08, -0.02, d) + sstep(-rim + 0.08, -rim + 0.02, -d) * 0);
+      }
+      if (d > -0.09) c = inkC;
+      if (Math.abs(d + rim) < 0.05) c = mixc(c, inkC, 0.8);
+      a = cov(d);
+    }
+    if (o < 0.05) {
+      const fx = (orn(X + e, Y) - orn(X - e, Y)) / (2 * e), fy = (orn(X, Y + e) - orn(X, Y - e)) / (2 * e);
+      let oc = o > -0.07 ? inkC : gold(X, Y, (fx * lc + fy * ls) * 0.8 + 0.25, !live);
+      const oa = cov(o); c = mixc(c, oc, oa); a = Math.max(a, oa);
+    }
+    if (flash) c = mixc(c, WHITE, 0.4);
+    a *= halfMask(kind, mode, X, cov);
+    if (a > 0) setPx(img, k, a, c);
+  }
+  return toRGBA(img);
+};
+/* =====================================================================
    PNG encoder + pack builder
    ===================================================================== */
 const CRC = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
@@ -1783,6 +2008,46 @@ function encodePNG(data, w, h) {
   dv.setUint32(0, w); dv.setUint32(4, h); ihdr[8] = 8; ihdr[9] = 6;
   const idat = pako.deflate(raw, { level: 6 });
   return new Blob([new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]), chunk("IHDR", ihdr), chunk("IDAT", idat), chunk("IEND", new Uint8Array(0))], { type: "image/png" });
+}
+/* =====================================================================
+   HUD styles: brand-new designs for the hearts, armor and XP bar (drawn in ui.js), all filled
+   with the galaxy. Styles never change the steak. One click applies a style.
+   ===================================================================== */
+const THEMES = [
+  { id: "", name: "Your current look", desc: "Your hearts, armor and XP bar as you set them in the other tabs." },
+  { id: "vial", name: "Galaxy vials", desc: "Glass containers with galaxy liquid sloshing inside: corked heart bottles, a glass XP tube, empty glass for empty slots." },
+  { id: "constellation", name: "Constellations", desc: "Each heart and armor piece traced by twinkling stars joined with glowing lines; the XP bar is a chain of star nodes." },
+  { id: "mosaic", name: "Low-poly mosaic", desc: "Everything built from small shimmering triangles of galaxy, with a dark outline." },
+  { id: "rift", name: "Cosmic rift", desc: "Jagged, glowing tears in space with the galaxy showing through, and little shards orbiting the hearts." },
+  { id: "celestial", name: "Celestial gold", desc: "Gold-rimmed galaxy with a crescent moon and a star on each heart, a star on the armor and star caps on the XP bar." },
+];
+/* build the settings a theme produces, starting from the current settings */
+function themeState(th) {
+  const s = clone(st);
+  // a style only changes how the hearts, armor and XP bar are drawn; colours, animation and the steak stay as they are
+  s.heart.uiStyle = th.id; s.armor.uiStyle = th.id; s.xp.uiStyle = th.id;
+  return s;
+}
+/* a small HUD drawn with any settings (swaps the global settings while drawing) */
+function drawMiniHud(cv, s, sc) {
+  const saved = st; st = s;
+  try {
+    const g = cv.getContext("2d"), k = sc, W = cv.width, H = cv.height;
+    const grad = g.createLinearGradient(0, 0, 0, H); grad.addColorStop(0, "#5d7d3f"); grad.addColorStop(1, "#43602c");
+    g.fillStyle = grad; g.fillRect(0, 0, W, H);
+    const x0 = Math.round((W - 182 * k) / 2), xpY = H - 7 * k, rowY = xpY - 10 * k, topY = rowY - 10 * k;
+    const ic = rgba => toCanvas(rgba);
+    const arm = ["empty", "half", "full"].map(m => ic(ARM(k, m)));
+    const hf = ic(HRT(k, 0.15, "full")), hh = ic(HRT(k, 0.15, "half")), hc = ic(HRT(k, 0, "container"));
+    const sf = ic(steakIcon(k, st, "full")), shf = ic(steakIcon(k, st, "half")), sc2 = ic(steakIcon(k, st, "container"));
+    const bub = ic(bubbleIcon(k, false, st.bubble.col)), pop = ic(bubbleIcon(k, true, st.bubble.col));
+    for (let i = 0; i < 10; i++) g.drawImage(arm[i < 6 ? 2 : i === 6 ? 1 : 0], x0 + i * 8 * k, topY);
+    for (let i = 0; i < 10; i++) { const x = x0 + i * 8 * k; g.drawImage(hc, x, rowY); if (i < 9) g.drawImage(i < 8 ? hf : hh, x, rowY); }
+    for (let i = 0; i < 10; i++) { const x = x0 + 182 * k - 9 * k - i * 8 * k; g.drawImage(sc2, x, rowY); if (i < 8) g.drawImage(i < 7 ? sf : shf, x, rowY); }
+    for (let i = 0; i < 7; i++) g.drawImage(i < 6 ? bub : pop, x0 + 182 * k - 9 * k - i * 8 * k, topY);
+    g.drawImage(ic(BAR(k, 0, "bg")), x0, xpY);
+    const fw = Math.round(182 * 0.72 * k); g.drawImage(ic(BAR(k, 0.2, "fill")), 0, 0, fw, 5 * k, x0, xpY, fw, 5 * k);
+  } finally { st = saved; }
 }
 /* =====================================================================
    Settings
@@ -1834,7 +2099,17 @@ const setP = (path, v) => { const ks = path.split("."), last = ks.pop(); ks.redu
 
 /* element renderers bound to the current settings */
 const HRT = (S, t, mode = "full", flash = false, cols = st.heart, seed = 0) => elementIcon("heart", S, st.heart, cols, t, mode, flash, seed);
-const ARM = (S, mode) => elementIcon("armor", S, st.armor, st.armor, 0, mode);
+/* the half-armor icon is shown on its own in game, so it is the full piece on the left and the empty slot on the right */
+function halfArmor(S) {
+  const f = elementIcon("armor", S, st.armor, st.armor, 0, "full"), e = elementIcon("armor", S, st.armor, st.armor, 0, "empty");
+  const out = new Uint8ClampedArray(f.data.length);
+  for (let j = 0; j < f.h; j++) for (let i = 0; i < f.w; i++) {
+    const k = (j * f.w + i) * 4, w = sat(0.5 - ((i + 0.5) / S - 4.5) * S);
+    for (let c = 0; c < 4; c++) out[k + c] = f.data[k + c] * w + e.data[k + c] * (1 - w);
+  }
+  return { w: f.w, h: f.h, data: out };
+}
+const ARM = (S, mode) => mode === "half" ? halfArmor(S) : elementIcon("armor", S, st.armor, st.armor, 0, mode);
 const BAR = (S, t, mode, cols = st.xp, seed = 5, flow = true) => elementIcon("bar", S, flow ? st.xp : Object.assign({}, st.xp, { flow: false }), cols, t, mode, false, seed);
 
 /* =====================================================================
@@ -1966,7 +2241,7 @@ const SECTIONS = [
     { controls: [R("cross.len", "Crosshair size", 1.5, 7.5, 0.1), R("cross.thick", "Crosshair thickness", 0.4, 2.5, 0.05)] },
   ] },
 ];
-const TABS = [["steak", "Steak"], ["heart", "Hearts"], ["armor", "Armor"], ["xp", "XP bar"], ["other", "Other HUD"]];
+const TABS = [["themes", "Styles"], ["steak", "Steak"], ["heart", "Hearts"], ["armor", "Armor"], ["xp", "XP bar"], ["other", "Other HUD"]];
 const $ = id => document.getElementById(id);
 
 /* ---------- outline editors (steak, hearts, armor) ---------- */
@@ -2171,6 +2446,38 @@ for (const sec of SECTIONS) {
   controlsEl.appendChild(card);
 }
 
+/* themes card */
+let themeUndo = null;
+{
+  const card = document.createElement("section"); card.className = "card"; card.dataset.tab = "themes"; card.setAttribute("aria-labelledby", "h-themes");
+  card.innerHTML = `<h2 id="h-themes"><span class="dot"></span>HUD styles</h2>
+    <p class="hint">New designs for the hearts, armor and XP bar, all filled with your galaxy. Your steak is never changed, and your colours and animation settings are kept. Click one to apply it; pick "Your current look" to go back.</p>
+    <div class="export-row"><button type="button" class="btn" id="theme-undo" disabled>Undo theme</button></div>
+    <div class="theme-grid" id="theme-grid"></div>`;
+  controlsEl.appendChild(card);
+  for (const th of THEMES) {
+    const b = document.createElement("button"); b.type = "button"; b.className = "theme"; b.dataset.id = th.id;
+    const c = document.createElement("canvas"); c.width = 560; c.height = 156; c.className = "fit";
+    const n = document.createElement("strong"); n.textContent = th.name;
+    const d = document.createElement("span"); d.textContent = th.desc;
+    b.append(c, n, d);
+    b.addEventListener("click", () => {
+      themeUndo = clone(st); st = Object.assign(themeState(th), { tab: st.tab });
+      $("theme-undo").disabled = false; syncInputs(); changed();
+      for (const x of $("theme-grid").children) x.setAttribute("aria-pressed", String(x === b));
+      setStatus(`Applied "${th.name}". Build the pack to use it.`, "ok");
+    });
+    $("theme-grid").appendChild(b);
+  }
+  $("theme-undo").addEventListener("click", () => { if (!themeUndo) return; st = themeUndo; themeUndo = null; $("theme-undo").disabled = true; syncInputs(); changed(); setStatus("Theme undone."); });
+}
+let themesDrawn = false;
+function drawThemes() {
+  if (themesDrawn) return; themesDrawn = true;
+  const btns = [...$("theme-grid").children];
+  btns.forEach((b, i) => setTimeout(() => drawMiniHud(b.querySelector("canvas"), themeState(THEMES[i]), 3), 30 * i));
+}
+
 /* chips: designs, textures and borders, each drawn with the current settings */
 const cap = n => n.charAt(0).toUpperCase() + n.slice(1);
 const elThumb = (kind, el) => kind === "bar" ? elementIcon("bar", 3, el, el, 0.2, "fill") : elementIcon(kind, 12, el, el, 0.15, "full");
@@ -2310,6 +2617,7 @@ function showTab() {
   for (const b of tabBar.children) b.setAttribute("aria-selected", String(b.id === "tab-" + st.tab));
   for (const card of controlsEl.querySelectorAll(".card[data-tab]")) card.hidden = card.dataset.tab !== st.tab;
   drawThumbs(); if (EDIT[st.tab]) syncEditor(st.tab);
+  if (st.tab === "themes") drawThemes();
   if (st.tab === "steak" && !varyBase) makeVariations();
 }
 
