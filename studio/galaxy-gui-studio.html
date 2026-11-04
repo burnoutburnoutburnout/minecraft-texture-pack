@@ -763,7 +763,56 @@ function steakTexture(tex, X, Y, ex, ey, top, C, seed, ctx, cov) {
   return mixc(plain, face, ctx.strength);
 }
 
+/* Custom empty steak slots, built from the full steak's silhouette so they work with every steak design. */
+function emptySteakIcon(S, st, flash, hunger, shOverride) {
+  const E = st.empty, W = 9 * S, n = W * W, img = newImg(S, 9, 9);
+  if (E.style === "hidden") return toRGBA(img);
+  const full = steakIcon(S, st, "full", false, false, shOverride), src = full.data;
+  // optional size change: sample the full icon around its centre of mass
+  let cx = 0, cy = 0, wsum = 0;
+  for (let k = 0; k < n; k++) { const a = src[k * 4 + 3]; if (a) { cx += (k % W) * a; cy += Math.floor(k / W) * a; wsum += a; } }
+  cx = wsum ? cx / wsum : W / 2; cy = wsum ? cy / wsum : W / 2;
+  const sz = E.size || 1, A = new Float32Array(n), RGB = new Float32Array(n * 3);
+  for (let j = 0; j < W; j++) for (let i = 0; i < W; i++) {
+    const si = Math.round(cx + (i - cx) / sz), sj = Math.round(cy + (j - cy) / sz), k = j * W + i;
+    if (si < 0 || sj < 0 || si >= W || sj >= W) continue;
+    const q = (sj * W + si) * 4; A[k] = src[q + 3] / 255; RGB[k * 3] = src[q] / 255; RGB[k * 3 + 1] = src[q + 1] / 255; RGB[k * 3 + 2] = src[q + 2] / 255;
+  }
+  // distance inside the silhouette (chamfer transform, in output pixels)
+  const D = new Float32Array(n), INF = 1e9;
+  for (let k = 0; k < n; k++) D[k] = A[k] > 0.5 ? INF : 0;
+  const r2 = Math.SQRT2;
+  for (let j = 0; j < W; j++) for (let i = 0; i < W; i++) { const k = j * W + i; if (!D[k]) continue;
+    let d = D[k]; if (i > 0) d = Math.min(d, D[k - 1] + 1); if (j > 0) { d = Math.min(d, D[k - W] + 1); if (i > 0) d = Math.min(d, D[k - W - 1] + r2); if (i < W - 1) d = Math.min(d, D[k - W + 1] + r2); } D[k] = d; }
+  for (let j = W - 1; j >= 0; j--) for (let i = W - 1; i >= 0; i--) { const k = j * W + i; if (!D[k]) continue;
+    let d = D[k]; if (i < W - 1) d = Math.min(d, D[k + 1] + 1); if (j < W - 1) { d = Math.min(d, D[k + W] + 1); if (i < W - 1) d = Math.min(d, D[k + W + 1] + r2); if (i > 0) d = Math.min(d, D[k + W - 1] + r2); } D[k] = d; }
+  const outC = flash ? rgb(250, 240, 232) : unhex(E.outline), fillC = unhex(hunger ? E.hungerFill : E.fill), ow = E.outlineW * S;
+  for (let j = 0; j < W; j++) for (let i = 0; i < W; i++) {
+    const k = j * W + i, a = A[k]; if (a <= 0) continue;
+    const dpx = D[k], inner = sat((dpx - ow) + 0.5), X = i / W, Y = j / W;
+    let c, fa;
+    if (E.style === "ghost") {
+      let g = [RGB[k * 3], RGB[k * 3 + 1], RGB[k * 3 + 2]];
+      const l = 0.3 * g[0] + 0.59 * g[1] + 0.11 * g[2];
+      g = mixc([l, l, l], g, E.ghostSat);                                  // how much of the steak's colour remains
+      g = scale3(g, E.ghostBright);
+      g = mixc(g, fillC, E.ghostTint);
+      c = g; fa = 1;                                                       // the steak's own outline is kept
+    } else {
+      let f = fillC;
+      f = scale3(f, 1 + E.shade * (0.35 - 0.7 * sat((X + Y) / 1.4)));        // lighter toward the top-left
+      f = scale3(f, 1 - E.shade * 0.35 * (1 - sat((dpx - ow) / (1.2 * S)))); // darker near the outline
+      fa = E.style === "outline" ? 0 : E.fillA;
+      c = mixc(outC, f, inner);
+      fa = lerp(1, fa, inner);
+    }
+    const alpha = a * fa * E.alpha;
+    if (alpha > 0.002) { img.a[k] = alpha; img.col[k * 3] = sat(c[0]); img.col[k * 3 + 1] = sat(c[1]); img.col[k * 3 + 2] = sat(c[2]); }
+  }
+  return toRGBA(img);
+}
 function steakIcon(S, st, kind = "full", flash = false, hunger = false, shOverride) {
+  if (kind === "container" && st.empty && st.empty.style && st.empty.style !== "default") return emptySteakIcon(S, st, flash, hunger, shOverride);
   { const shp = shOverride || st.shape;
     if (shp.texture === "smooth-grilled") return slabSteakIcon(S, st, kind, flash, hunger, shp);
     if (shp.texture === "smooth-bean") return smoothSteakIcon(S, st, kind, flash, hunger, shp);
@@ -2130,6 +2179,8 @@ const DEFAULTS = {
   design: "grill", shape: designShape("grill"),
   steakCol: { meat: "#703624", dark: "#422015", rim: "#a65035", side: "#401f15", burn: "#100805", linked: true },
   hungerTint: "#64962e",
+  empty: { style: "default", fill: "#1f2120", outline: "#060403", outlineW: 0.55, shade: 0.35, fillA: 1, alpha: 1,
+    ghostBright: 0.35, ghostSat: 0.15, ghostTint: 0.25, size: 1, hungerFill: "#26321a" },
   heart: clone(EL_DEFAULTS.heart),
   poison: { c1: "#0e3c18", c2: "#329638", c3: "#96f06e" },
   wither: { c1: "#121218", c2: "#403e4c", c3: "#828092" },
@@ -2311,6 +2362,14 @@ const SECTIONS = [
     { controls: [C("steakCol.meat", "Meat"), C("steakCol.dark", "Seared"), C("steakCol.rim", "Highlight"), C("steakCol.side", "Side"),
       C("shape.outlineCol", "Outline"), C("steakCol.burn", "Burn lines"), C("hungerTint", "Hunger effect")] },
     { controls: [TG("steakCol.linked", "Match seared, highlight and side to the meat colour")] },
+  ] },
+  { id: "steak-empty", tab: "steak", title: "Empty steak slots", cls: "meat",
+    hint: "How the hunger bar looks where you've lost food. Faded steak dims your own steak; Solid and Outline only use the colours below. The live preview shows the result.", groups: [
+    { controls: [SEL("empty.style", "Style", [["default", "Design default"], ["solid", "Solid colour"], ["ghost", "Faded steak"], ["outline", "Outline only"], ["hidden", "Hidden (no empty slots)"]])] },
+    { label: "Colours", controls: [C("empty.fill", "Fill"), C("empty.outline", "Outline"), C("empty.hungerFill", "Fill with hunger effect")] },
+    { label: "Solid & outline only", controls: [R("empty.outlineW", "Outline thickness", 0, 1.5, 0.01), R("empty.shade", "Shading", 0, 1, 0.01), R("empty.fillA", "Fill opacity", 0, 1, 0.01)] },
+    { label: "Faded steak", controls: [R("empty.ghostBright", "Brightness", 0, 1, 0.01), R("empty.ghostSat", "Steak colour kept", 0, 1, 0.01), R("empty.ghostTint", "Tint with fill colour", 0, 1, 0.01)] },
+    { label: "All styles", controls: [R("empty.alpha", "Overall opacity", 0, 1, 0.01), R("empty.size", "Size", 0.6, 1.1, 0.01)] },
   ] },
   ...elSections("heart", "heart", "Hearts", ""),
   ...elSections("armor", "armor", "Armor", ""),
