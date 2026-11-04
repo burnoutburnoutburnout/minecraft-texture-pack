@@ -2013,22 +2013,21 @@ UI_STYLES.celestial = (kind, S, el, cols, t, mode, flash, seed) => {
 /* Hardcore mark (vanilla's hardcore hearts): a dark chevron across the heart with a lit edge above it.
    lx, ly are heart-local coordinates (base px from the heart's centre, before scaling). */
 function hardcoreMark(g, lx, ly, P, S, darkFill, fr) {
-  // Two separate slanted ovals (vanilla hardcore hearts), angled down toward the middle with a gap between them.
-  // Placed relative to the heart's own extent (fr, in heart-local units) so they sit right on any heart shape.
+  // Exactly two marks, as on vanilla hardcore hearts: a thick diagonal stroke on each side, running from the upper
+  // outer part of the heart down toward the middle, with a gap between them. Positions measured from a reference,
+  // as fractions of the heart's own extent (fr, heart-local units).
   fr = fr || { cx: 0, cy: -0.2, w: 7.6, h: 7.6 };
-  const cov = covf(S), rx = 0.175 * fr.w, ry = 0.095 * fr.h, mx = 0.205 * fr.w, my = fr.cy - 0.005 * fr.h, a = 0.7;
-  const ov = (dy, k) => Math.min(sdEllipse(lx, ly + dy, fr.cx - mx, my, rx, ry * k, a), sdEllipse(lx, ly + dy, fr.cx + mx, my, rx, ry * k, -a));
-  const band = cov(ov(0, 1));
-  const upper = cov(ov(ry * 0.55, 0.55)) * band, lower = band * (1 - cov(ov(-ry * 0.45, 0.6)));
-  const rim = cov(ov(ry * 1.15, 0.6)) * (1 - band);                       // light just above each mark
-  if (darkFill) {
-    g = mixc(g, mixc(P.bright, WHITE, 0.4), rim * 0.35);
-    g = mixc(g, mixc(P.cloud, P.bright, 0.35), band * 0.8);          // glowing violet ovals on dark galaxy hearts
-    g = mixc(g, mixc(P.bright, WHITE, 0.55), upper * 0.7);
-    return mixc(g, scale3(P.dark, 0.5), lower * 0.7);
+  const top = fr.cy - fr.h / 2, hw = 0.07 * fr.w;
+  let d = 9;
+  for (const s of [-1, 1]) {
+    const ax = fr.cx + s * 0.33 * fr.w, ay = top + 0.34 * fr.h, bx = fr.cx + s * 0.11 * fr.w, by = top + 0.56 * fr.h;
+    const ex = bx - ax, ey = by - ay, q = sat(((lx - ax) * ex + (ly - ay) * ey) / (ex * ex + ey * ey));
+    const w = hw * (1 - 0.25 * q);                                           // a little thinner toward the middle
+    d = Math.min(d, Math.hypot(lx - ax - ex * q, ly - ay - ey * q) - w);
   }
-  g = mixc(g, mixc(P.bright, WHITE, 0.35), rim * 0.55);
-  return mixc(g, scale3(P.deep, 0.65), band * 0.85);                   // dark ovals on light hearts, as in vanilla
+  const m = sat(0.5 - d / Math.max(0.1, 1.2 / S));
+  const markC = darkFill ? mixc(P.deep, P.cloud, 0.22) : scale3(P.deep, 0.6);
+  return mixc(g, markC, m * 0.92);
 }
 /* =====================================================================
    PNG encoder + pack builder
