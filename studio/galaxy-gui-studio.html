@@ -421,9 +421,68 @@ const unhex = h => [parseInt(h.slice(1, 3), 16) / 255, parseInt(h.slice(3, 5), 1
 const covf = S => d => sat(0.5 - d * S);
 const setPx = (img, p, a, c) => { img.a[p] = a; img.col[p * 3] = sat(c[0]); img.col[p * 3 + 1] = sat(c[1]); img.col[p * 3 + 2] = sat(c[2]); };
 /* Air bubbles. The style and its settings come from st.bubble (when the settings exist). */
-const BUBBLE_STYLES = { classic: "Classic", glass: "Glass orb", galaxy: "Galaxy orb", ring: "Ring", soap: "Soap bubble", planet: "Planet" };
+const BUBBLE_STYLES = { classic: "Classic", glass: "Glass orb", galaxy: "Galaxy orb", ring: "Ring", soap: "Soap bubble", planet: "Planet",
+  droplet: "Droplet", star: "Star", crystal: "Crystal", hexagon: "Hexagon", moon: "Moon", cluster: "Cluster", sparkle: "Sparkle", cube: "Cube", comet: "Comet" };
+/* Shaped bubbles: each has its own outline (signed distance in base px around the slot centre). */
+const bsmin = (a, b, k) => { const h = sat(0.5 + 0.5 * (b - a) / k); return b * (1 - h) + a * h - k * h * (1 - h); };
+const starPts = (n, ro, ri, rot, cx = 4.5, cy = 4.6) => { const p = []; for (let i = 0; i < 2 * n; i++) { const r = i % 2 ? ri : ro, t = rot + Math.PI * i / n; p.push([cx + r * Math.cos(t), cy + r * Math.sin(t)]); } return p; };
+const BUBBLE_SHAPES = {
+  droplet: { sd: (X, Y) => bsmin(Math.hypot(X - 4.5, Y - 5.5) - 2.55, sdPolygon(X, Y, [[4.5, 0.7], [6.25, 4.6], [2.75, 4.6]]), 0.9), hl: [3.4, 4.6] },
+  star: { pts: starPts(5, 4.0, 1.95, -Math.PI / 2), round: 0.35, hl: [3.7, 3.6] },
+  crystal: { pts: [[2.7, 1.3], [6.3, 1.3], [8.1, 3.5], [4.5, 8.3], [0.9, 3.5]], round: 0.12, hl: [3.3, 2.7], facets: true },
+  hexagon: { pts: starPts(6, 3.8, 3.8, -Math.PI / 2, 4.5, 4.5).filter((_, i) => i % 2 === 0), round: 0.3, hl: [3.2, 3.2] },
+  moon: { sd: (X, Y) => Math.max(Math.hypot(X - 4.4, Y - 4.6) - 3.5, -(Math.hypot(X - 6.2, Y - 3.3) - 2.85)), hl: [2.4, 4.3] },
+  cluster: { circles: [[3.35, 5.45, 2.35], [6.4, 5.3, 1.65], [5.25, 2.45, 1.3]] },
+  sparkle: { pts: starPts(4, 4.2, 1.15, -Math.PI / 2, 4.5, 4.5), round: 0.25, hl: [3.9, 3.7] },
+  cube: { sd: (X, Y) => sdBox(X, Y, 4.5, 4.5, 3.2, 3.2, 1.0), hl: [3.0, 2.9] },
+  comet: { sd: (X, Y) => {
+      const head = Math.hypot(X - 5.7, Y - 3.4) - 2.3, ax = 5.7, ay = 3.4, bx = 1.0, by = 8.1;
+      const ex = bx - ax, ey = by - ay, t = sat(((X - ax) * ex + (Y - ay) * ey) / (ex * ex + ey * ey));
+      const tail = Math.hypot(X - ax - ex * t, Y - ay - ey * t) - lerp(1.9, 0.15, t);
+      return bsmin(head, tail, 0.5); }, hl: [4.9, 2.5] },
+};
+function shapedBubble(S, popping, col, cfg) {
+  const B = BUBBLE_SHAPES[cfg.style], img = newImg(S, 9, 9), cov = covf(S), sz = cfg.size, base = unhex(col), acc = unhex(cfg.accent);
+  const rimC = mixc(base, WHITE, 0.6), rimW = 0.36 * cfg.rim, popK = popping ? 1.1 : 1;
+  const sdRaw = (X, Y) => {
+    if (B.circles) return Math.min(...B.circles.map(([cx, cy, r]) => Math.hypot(X - cx, Y - cy) - r));
+    if (B.sd) return B.sd(X, Y);
+    return sdPolygon(X, Y, B.pts) - B.round;
+  };
+  const sd = (X, Y) => sdRaw(4.5 + (X - 4.5) / (sz * popK), 4.5 + (Y - 4.5) / (sz * popK)) * sz * popK;
+  const hls = B.circles ? B.circles.map(([cx, cy, r]) => [cx - r * 0.38, cy - r * 0.42, r * 0.36]) : [[B.hl[0], B.hl[1], 0.75]];
+  for (let j = 0; j < img.H; j++) for (let i = 0; i < img.W; i++) {
+    const X = (i + 0.5) / S, Y = (j + 0.5) / S, p = j * img.W + i, d = sd(X, Y);
+    let c, a;
+    if (popping) {
+      const ang = Math.atan2(Y - 4.5, X - 4.5);
+      a = cov(Math.abs(d) - rimW * 0.8) * sstep(-0.2, 0.25, Math.cos(ang * 5 + 0.7)); c = rimC;
+      for (let k = 0; k < 5; k++) { const t = k * TAU / 5 + 0.3, dd = Math.hypot(X - 4.5 - Math.cos(t) * 4.0 * sz, Y - 4.5 - Math.sin(t) * 4.0 * sz) - 0.3 * sz; const da = cov(dd); if (da > a) { a = da; c = rimC; } }
+    } else {
+      if (d > 0.05) continue;
+      const L = sat(0.55 - ((X - 4.5) + (Y - 4.5)) / (6.5 * sz));
+      c = mixc(scale3(base, 0.45), mixc(base, WHITE, 0.2), L);
+      c = mixc(c, mixc(base, acc, 0.5), sstep(-1.6 * sz, 0, d) * 0.25);              // tinted toward the edge
+      if (B.facets) {                                                                 // crystal: facet lines from the table
+        const fd = Math.min(Math.abs(Y - 3.5 * 1) , ...[[2.7, 1.3], [6.3, 1.3]].map(([x0, y0]) => Math.abs((X - x0) * (8.3 - y0) - (Y - y0) * (4.5 - x0)) / Math.hypot(8.3 - y0, 4.5 - x0)));
+        c = mixc(c, mixc(base, WHITE, 0.55), cov(fd - 0.07) * 0.6);
+        c = mixc(c, mixc(base, WHITE, 0.35), (Y < 3.5 ? 0.25 : 0) * (X > 4.5 ? 0.4 : 1));
+      }
+      const rim = cov(Math.abs(d + rimW * 0.55) - rimW * 0.55);
+      a = Math.max(cov(d) * 0.55, rim);
+      c = mixc(c, rimC, rim);
+      let h = 0;
+      for (const [hx, hy, hr] of hls) h = Math.max(h, sat(-sdEllipse(X, Y, 4.5 + (hx - 4.5) * sz, 4.5 + (hy - 4.5) * sz, hr * sz, hr * 0.5 * sz, -0.7) / 0.22));
+      h *= cfg.shine * cov(d + 0.25); c = mixc(c, WHITE, h); a = Math.max(a, h * 0.95);
+    }
+    a *= cfg.alpha; if (a <= 0.003) continue;
+    setPx(img, p, a, c);
+  }
+  return toRGBA(img);
+}
 function bubbleIcon(S, popping, col, cfg) {
   cfg = Object.assign({ style: "classic", accent: "#ffffff", size: 1, rim: 1, shine: 1, alpha: 1 }, cfg || (typeof st !== "undefined" ? st.bubble : {}));
+  if (BUBBLE_SHAPES[cfg.style]) return shapedBubble(S, popping, col, cfg);
   const img = newImg(S, 9, 9), cov = covf(S), sz = cfg.size, R = 3.3 * sz, base = unhex(col), acc = unhex(cfg.accent), rimW = 0.4 * cfg.rim;
   const style = cfg.style, rimC = mixc(base, WHITE, 0.6);
   const pal = { dark: scale3(base, 0.12), deep: scale3(base, 0.35), cloud: base, cloud2: mixc(base, acc, 0.4), bright: mixc(base, WHITE, 0.5),
