@@ -234,3 +234,78 @@ function hardcoreMark(g, lx, ly, P, S, darkFill, fr) {
   const markC = darkFill ? mixc(P.deep, P.cloud, 0.22) : scale3(P.deep, 0.6);
   return mixc(g, markC, m * 0.92);
 }
+
+/* ---------- extra XP-bar-only styles ---------- */
+UI_LABELS.beads = "Galaxy beads"; UI_LABELS.neonline = "Neon line"; UI_LABELS.ribbon = "Starry ribbon"; UI_LABELS.pills = "Glow pills";
+function barStyleBase(S, el, cols, t, mode, seed) {
+  const live = isLive(mode), b = uiBase("bar", S, el, cols, t, seed, live);
+  return Object.assign(b, { live });
+}
+UI_STYLES.beads = (kind, S, el, cols, t, mode, flash, seed) => {
+  const { W, H, P, buf, cov, img, live } = barStyleBase(S, el, cols, t, mode, seed), n = 22, step = 182 / n;
+  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+    const k = j * W + i, X = (i + 0.5) / S, Y = (j + 0.5) / S, bi = Math.min(n - 1, Math.floor(X / step)), bx = (bi + 0.5) * step;
+    const d = Math.hypot(X - bx, Y - 2.5) - 2.25; if (d > 0.05) continue;
+    let c;
+    if (live) {
+      c = gal(buf, k);
+      c = mixc(c, mixc(P.bright, WHITE, 0.3), sstep(-0.5, 0, d) * 0.45);
+      c = mixc(c, WHITE, sat(-sdEllipse(X, Y, bx - 0.8, 1.6, 0.7, 0.35, -0.5) / 0.2) * 0.7);
+    } else c = mixc(rgb(14, 12, 30), rgb(40, 36, 70), sstep(-0.5, 0, d) * 0.6);
+    c = mixc(c, rgb(6, 4, 16), cov(Math.abs(d) - 0.12) * 0.9);
+    if (flash) c = mixc(c, WHITE, 0.4);
+    setPx(img, k, cov(d), c);
+  }
+  return toRGBA(img);
+};
+UI_STYLES.neonline = (kind, S, el, cols, t, mode, flash, seed) => {
+  const { W, H, P, buf, cov, img, live } = barStyleBase(S, el, cols, t, mode, seed);
+  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+    const k = j * W + i, X = (i + 0.5) / S, Y = (j + 0.5) / S, dy = Math.abs(Y - 2.5), ends = sstep(0, 1.2, Math.min(X, 182 - X));
+    let c, a;
+    if (live) {
+      const core = cov(dy - 0.55), glow = Math.exp(-(((dy - 0.55) / 0.9) ** 2)) * (dy > 0.55 ? 1 : 0);
+      c = mixc(mixc(P.bright, gal(buf, k), 0.35), WHITE, cov(dy - 0.2) * 0.6);
+      a = Math.max(core, glow * 0.75) * ends;
+      if (core < 0.5) c = mixc(P.cloud, P.bright, 0.5);
+    } else { c = rgb(28, 26, 52); a = cov(dy - 0.45) * 0.85 * ends; }
+    if (flash) c = mixc(c, WHITE, 0.4);
+    if (a > 0.003) setPx(img, k, a, c);
+  }
+  return toRGBA(img);
+};
+UI_STYLES.ribbon = (kind, S, el, cols, t, mode, flash, seed) => {
+  const { W, H, P, buf, cov, img, live } = barStyleBase(S, el, cols, t, mode, seed);
+  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+    const k = j * W + i, X = (i + 0.5) / S, Y = (j + 0.5) / S;
+    const yc = 2.5 + 1.05 * Math.sin(X * 0.3), th = 0.95 + 0.3 * Math.cos(X * 0.3), d = Math.max(Math.abs(Y - yc) - th, Math.max(-X, X - 182));
+    if (d > 0.05) continue;
+    const twist = 0.5 + 0.5 * Math.cos(X * 0.3);                                // the ribbon catches light as it turns
+    let c = live ? scale3(gal(buf, k), 0.75 + 0.5 * twist) : mixc(rgb(14, 12, 30), rgb(32, 28, 56), twist);
+    if (live) c = mixc(c, mixc(P.bright, WHITE, 0.35), cov(Math.abs(Y - (yc - th + 0.18)) - 0.1) * 0.7);
+    c = mixc(c, rgb(6, 4, 16), sstep(-0.22, -0.04, d) * 0.85);
+    if (flash) c = mixc(c, WHITE, 0.4);
+    setPx(img, k, cov(d), c);
+  }
+  return toRGBA(img);
+};
+UI_STYLES.pills = (kind, S, el, cols, t, mode, flash, seed) => {
+  const { W, H, P, buf, cov, img, live } = barStyleBase(S, el, cols, t, mode, seed), n = 10, step = 182 / n;
+  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+    const k = j * W + i, X = (i + 0.5) / S, Y = (j + 0.5) / S, bi = Math.min(n - 1, Math.floor(X / step)), bx = (bi + 0.5) * step;
+    const d = sdBox(X, Y, bx, 2.5, step / 2 - 1.0, 1.7, 1.7);
+    const glowA = live ? Math.exp(-Math.max(d, 0) / 0.55) * 0.55 * (d > 0 ? 1 : 0) : 0;
+    if (d > 0.05 && glowA < 0.01) continue;
+    let c, a;
+    if (d <= 0.05) {
+      if (live) { c = gal(buf, k); c = mixc(c, mixc(P.bright, WHITE, 0.25), sstep(-0.7, 0, d) * 0.6); c = mixc(c, WHITE, sstep(0.35, 0.05, Math.abs(Y - 1.35)) * 0.3 * cov(d + 0.4)); }
+      else c = mixc(rgb(14, 12, 30), rgb(44, 40, 76), sstep(-0.6, 0, d) * 0.7);
+      a = cov(d);
+    } else { c = P.bright; a = 0; }
+    if (glowA > a) { c = d > 0.05 ? P.bright : c; a = Math.max(a, glowA * sstep(0, 0.8, Math.min(X, 182 - X))); }
+    if (flash) c = mixc(c, WHITE, 0.4);
+    if (a > 0.003) setPx(img, k, a, c);
+  }
+  return toRGBA(img);
+};
+const XP_STYLE_NAMES = ["", "vial", "constellation", "mosaic", "rift", "celestial", "beads", "neonline", "ribbon", "pills"];

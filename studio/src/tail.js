@@ -16,7 +16,7 @@ const DEFAULTS = {
   xp: clone(EL_DEFAULTS.bar),
   boss: { c1: "#3c0a46", c2: "#b428a0", c3: "#ff6edc" },
   jump: { c1: "#5a2e06", c2: "#d28818", c3: "#ffe26e" },
-  bubble: { col: "#78c8ff" },
+  bubble: { col: "#78c8ff", style: "classic", accent: "#ffd27a", size: 1, rim: 1, shine: 1, alpha: 1 },
   cross: { col: "#ffffff", len: 4.5, thick: 1.0 },
   res: 256,
 };
@@ -134,6 +134,8 @@ function elSections(key, kind, name, cls) {
   if (kind !== "bar") shapeGroups.push({ label: "Draw my own", controls: [R(p("smooth"), "Corner smoothness", 0, 1, 0.01)] });
   shapeGroups.push({ label: kind === "bar" ? "Bar" : "Slider shape", controls: shapeCtl });
   return [
+    ...(kind === "bar" ? [{ id: "xp-style", tab: key, title: "XP bar style", cls, chips: "styles-xp",
+      hint: "A drawn style for the XP bar only, filled with your galaxy colours. \"Built from the cards\" uses the design, texture and border cards below.", groups: [] }] : []),
     { id: key + "-design", tab: key, title: name + ": start from a design", cls, chips: "designs-" + key,
       hint: "A design sets the texture, colours, border, shape and lighting together. Change any part of it in the cards below.", groups: [] },
     { id: key + "-texture", tab: key, title: name + " texture", cls, chips: "textures-" + key, groups: [{ controls: texCtl }] },
@@ -201,8 +203,14 @@ const SECTIONS = [
   ...elSections("heart", "heart", "Hearts", ""),
   ...elSections("armor", "armor", "Armor", ""),
   ...elSections("xp", "bar", "XP bar", "xp"),
-  { id: "other", tab: "other", title: "Air bubbles & crosshair", groups: [
-    { controls: [C("bubble.col", "Bubbles"), C("cross.col", "Crosshair")] },
+  { id: "bubbles", tab: "other", title: "Air bubbles", chips: [["styles-bubble", "Pick a bubble style"]],
+    hint: "Each style has a matching popping bubble for the last bit of air.", groups: [
+    { controls: [C("bubble.col", "Colour"), C("bubble.accent", "Accent (planet ring, soap tint)")] },
+    { controls: [R("bubble.size", "Size", 0.6, 1.25, 0.01), R("bubble.rim", "Rim thickness", 0.3, 2.5, 0.01),
+      R("bubble.shine", "Shine", 0, 1.5, 0.01), R("bubble.alpha", "Opacity", 0.2, 1, 0.01)] },
+  ] },
+  { id: "other", tab: "other", title: "Crosshair", groups: [
+    { controls: [C("cross.col", "Crosshair")] },
     { controls: [R("cross.len", "Crosshair size", 1.5, 7.5, 0.1), R("cross.thick", "Crosshair thickness", 0.4, 2.5, 0.05)] },
   ] },
 ];
@@ -502,6 +510,12 @@ chipSets["shapes-heart"] = { tab: "heart", kind: "heart", names: Object.keys(HEA
     Object.assign(h, clone(HEART_SHAPES[n].set), { posX: 0, tilt: 0, facets: 0, heartShape: n });
   },
   sel: () => st.heart.illus === "gemheart" ? "gemcut" : st.heart.heartShape || "" };
+chipSets["styles-bubble"] = { tab: "other", kind: "bubble", names: Object.keys(BUBBLE_STYLES), label: n => BUBBLE_STYLES[n],
+  render: n => bubbleIcon(12, false, st.bubble.col, Object.assign({}, st.bubble, { style: n })),
+  pick: n => { st.bubble.style = n; }, sel: () => st.bubble.style };
+chipSets["styles-xp"] = { tab: "xp", kind: "bar", names: XP_STYLE_NAMES, label: n => n ? UI_LABELS[n] : "Built from the cards",
+  render: n => elementIcon("bar", 3, Object.assign(clone(st.xp), { uiStyle: n }), st.xp, 0.2, "fill"),
+  pick: n => { st.xp.uiStyle = n; }, sel: () => st.xp.uiStyle || "" };
 const thumbs = [];
 for (const [set, cfg] of Object.entries(chipSets)) {
   for (const name of cfg.names) {

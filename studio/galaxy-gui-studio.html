@@ -420,15 +420,64 @@ const unhex = h => [parseInt(h.slice(1, 3), 16) / 255, parseInt(h.slice(3, 5), 1
    ===================================================================== */
 const covf = S => d => sat(0.5 - d * S);
 const setPx = (img, p, a, c) => { img.a[p] = a; img.col[p * 3] = sat(c[0]); img.col[p * 3 + 1] = sat(c[1]); img.col[p * 3 + 2] = sat(c[2]); };
-function bubbleIcon(S, popping, col) {
-  const img = newImg(S, 9, 9), cov = covf(S), r = popping ? 3.6 : 3.3, base = unhex(col), ringC = mixc(base, WHITE, 0.6);
+/* Air bubbles. The style and its settings come from st.bubble (when the settings exist). */
+const BUBBLE_STYLES = { classic: "Classic", glass: "Glass orb", galaxy: "Galaxy orb", ring: "Ring", soap: "Soap bubble", planet: "Planet" };
+function bubbleIcon(S, popping, col, cfg) {
+  cfg = Object.assign({ style: "classic", accent: "#ffffff", size: 1, rim: 1, shine: 1, alpha: 1 }, cfg || (typeof st !== "undefined" ? st.bubble : {}));
+  const img = newImg(S, 9, 9), cov = covf(S), sz = cfg.size, R = 3.3 * sz, base = unhex(col), acc = unhex(cfg.accent), rimW = 0.4 * cfg.rim;
+  const style = cfg.style, rimC = mixc(base, WHITE, 0.6);
+  const pal = { dark: scale3(base, 0.12), deep: scale3(base, 0.35), cloud: base, cloud2: mixc(base, acc, 0.4), bright: mixc(base, WHITE, 0.5),
+    tint: acc, star: WHITE, starMul: 1 };
+  const field = style === "galaxy" && !popping ? starfield(S, 9, 9, 0.2, pal, { seed: 11, scale: [16, 16], dens: 0.12, big: 0.02 }) : null;
   for (let j = 0; j < img.H; j++) for (let i = 0; i < img.W; i++) {
-    const X = (i + 0.5) / S, Y = (j + 0.5) / S, d = Math.hypot(X - 4.5, Y - 4.5) - r, p = j * img.W + i;
-    let ring = cov(Math.abs(d) - 0.4), inside = cov(d);
-    if (popping) { ring *= sstep(-0.2, 0.25, Math.cos(Math.atan2(Y - 4.5, X - 4.5) * 4 + 0.5)); inside = 0; }
-    const h = popping ? 0 : sat(-sdEllipse(X, Y, 3.2, 3.1, 0.8, 0.45, -0.7) / 0.3);
-    let c = mixc(base, ringC, ring); c = mixc(c, WHITE, h);
-    const a = Math.max(ring, inside * 0.35, h * 0.9); if (a <= 0) continue;
+    const X = (i + 0.5) / S, Y = (j + 0.5) / S, dx = X - 4.5, dy = Y - 4.5, r = Math.hypot(dx, dy), ang = Math.atan2(dy, dx), p = j * img.W + i;
+    let c = [0, 0, 0], a = 0;
+    const put = (col2, al) => { if (al <= 0) return; c = a > 0 ? mixc(c, col2, al / Math.min(1, a + al)) : col2; a = Math.min(1, a + al * (1 - a)); };
+    if (popping) {                                            // every style pops into broken arcs and a few droplets
+      const rr = R * 1.12, ring = cov(Math.abs(r - rr) - rimW) * sstep(-0.2, 0.25, Math.cos(ang * 4 + 0.5));
+      const pc = style === "soap" ? [0.5 + 0.5 * Math.cos(ang * 2), 0.5 + 0.5 * Math.cos(ang * 2 - 2.1), 0.5 + 0.5 * Math.cos(ang * 2 + 2.1)] : style === "planet" ? acc : rimC;
+      put(pc, ring);
+      for (let k = 0; k < 4; k++) { const t = k * TAU / 4 + 0.95, d = Math.hypot(X - 4.5 - Math.cos(t) * (rr + 0.9), Y - 4.5 - Math.sin(t) * (rr + 0.9)) - 0.32 * sz; put(pc, cov(d)); }
+    } else if (style === "classic") {
+      const d = r - R, ring = cov(Math.abs(d) - rimW), h = sat(-sdEllipse(X, Y, 4.5 - 1.3 * sz, 4.5 - 1.4 * sz, 0.8 * sz, 0.45 * sz, -0.7) / 0.3) * cfg.shine;
+      c = mixc(base, rimC, ring); c = mixc(c, WHITE, h); a = Math.max(ring, cov(d) * 0.35, h * 0.9);
+    } else if (style === "glass") {
+      const d = r - R, inside = cov(d), ring = cov(Math.abs(d + rimW * 0.5) - rimW * 0.7);
+      const L = sat(0.5 - (dx + dy) / (2.6 * R));
+      let g = mixc(scale3(base, 0.35), mixc(base, WHITE, 0.25), L);
+      g = mixc(g, mixc(base, WHITE, 0.7), sstep(R * 0.55, R, r) * sstep(0, 1, (dx + dy) / R) * 0.6);       // light through the far side
+      put(g, inside * 0.78); put(mixc(base, WHITE, 0.55), ring * 0.9);
+      put(WHITE, sat(-sdEllipse(X, Y, 4.5 - 1.15 * sz, 4.5 - 1.3 * sz, 1.0 * sz, 0.5 * sz, -0.7) / 0.25) * 0.95 * cfg.shine);
+      put(WHITE, cov(Math.hypot(X - 4.5 - 1.45 * sz, Y - 4.5 + 0.2 * sz) - 0.22 * sz) * 0.8 * cfg.shine);
+    } else if (style === "galaxy") {
+      const d = r - R, inside = cov(d);
+      put([field[p * 3], field[p * 3 + 1], field[p * 3 + 2]], inside);
+      put(mixc(base, WHITE, 0.5), cov(Math.abs(d + rimW * 0.5) - rimW * 0.6) * 0.95);
+      put(WHITE, sat(-sdEllipse(X, Y, 4.5 - 1.3 * sz, 4.5 - 1.4 * sz, 0.75 * sz, 0.36 * sz, -0.7) / 0.25) * 0.75 * cfg.shine);
+    } else if (style === "ring") {
+      const d = r - R;
+      put(mixc(base, WHITE, 0.3), cov(Math.abs(d) - rimW * 0.55));
+      put(base, Math.exp(-((d / (0.6 + rimW)) ** 2)) * 0.35);                                              // soft glow
+      const sx = X - 4.5 - R * 0.62, sy = Y - 4.5 + R * 0.62, st4 = Math.min(Math.abs(sx) / 0.55 + Math.abs(sy) / 0.09, Math.abs(sx) / 0.09 + Math.abs(sy) / 0.55) - 1;
+      put(WHITE, sat(-st4 * 2.5) * cfg.shine);                                                            // sparkle on the rim
+    } else if (style === "soap") {
+      const d = r - R, hue = ang * 1.0 + 0.6 * Math.sin(r * 2.2);
+      const irid = [0.55 + 0.45 * Math.cos(hue), 0.55 + 0.45 * Math.cos(hue - 2.1), 0.55 + 0.45 * Math.cos(hue + 2.1)];
+      put(mixc(base, irid, 0.35), cov(d) * 0.18);
+      put(mixc(irid, WHITE, 0.25), cov(Math.abs(d + rimW * 0.4) - rimW * 0.5) * 0.9 * sstep(-R * 0.2, R, r));
+      put(WHITE, sat(-sdEllipse(X, Y, 4.5 - 1.25 * sz, 4.5 - 1.35 * sz, 0.85 * sz, 0.38 * sz, -0.7) / 0.25) * 0.9 * cfg.shine);
+      put(WHITE, cov(Math.hypot(X - 4.5 + 0.35 * sz, Y - 4.5 + 2.0 * sz) - 0.17 * sz) * 0.8 * cfg.shine);
+    } else if (style === "planet") {
+      const pr = R * 0.72, d = r - pr, tilt = -0.42, ca = Math.cos(tilt), sa = Math.sin(tilt), ux = dx * ca + dy * sa, uy = -dx * sa + dy * ca;
+      const ringD = Math.abs(Math.hypot(ux / (R * 1.28), uy / (R * 0.38)) - 1) * R * 0.38, ringA = cov(ringD - 0.13 * cfg.rim * 2), front = uy > 0;
+      if (!front) put(mixc(acc, base, 0.3), ringA * 0.9);                                                 // back half of the ring
+      const L = sat(0.5 - (dx + dy) / (2.4 * pr)), band = 0.5 + 0.5 * Math.sin(uy * 3.2 + 0.4 * Math.sin(ux * 2));
+      let g = mixc(scale3(base, 0.3), mixc(base, WHITE, 0.2), L); g = mixc(g, scale3(g, 0.72), band * 0.6);
+      put(g, cov(d)); put(scale3(base, 0.2), cov(Math.abs(d + 0.06) - 0.12) * 0.6);
+      put(WHITE, sat(-sdEllipse(X, Y, 4.5 - 0.95 * sz, 4.5 - 1.05 * sz, 0.6 * sz, 0.28 * sz, -0.7) / 0.2) * 0.6 * cfg.shine);
+      if (front) put(mixc(acc, WHITE, 0.15), ringA);                                                        // front half of the ring
+    }
+    a *= cfg.alpha; if (a <= 0.003) continue;
     setPx(img, p, a, c);
   }
   return toRGBA(img);
@@ -2110,6 +2159,81 @@ function hardcoreMark(g, lx, ly, P, S, darkFill, fr) {
   const markC = darkFill ? mixc(P.deep, P.cloud, 0.22) : scale3(P.deep, 0.6);
   return mixc(g, markC, m * 0.92);
 }
+
+/* ---------- extra XP-bar-only styles ---------- */
+UI_LABELS.beads = "Galaxy beads"; UI_LABELS.neonline = "Neon line"; UI_LABELS.ribbon = "Starry ribbon"; UI_LABELS.pills = "Glow pills";
+function barStyleBase(S, el, cols, t, mode, seed) {
+  const live = isLive(mode), b = uiBase("bar", S, el, cols, t, seed, live);
+  return Object.assign(b, { live });
+}
+UI_STYLES.beads = (kind, S, el, cols, t, mode, flash, seed) => {
+  const { W, H, P, buf, cov, img, live } = barStyleBase(S, el, cols, t, mode, seed), n = 22, step = 182 / n;
+  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+    const k = j * W + i, X = (i + 0.5) / S, Y = (j + 0.5) / S, bi = Math.min(n - 1, Math.floor(X / step)), bx = (bi + 0.5) * step;
+    const d = Math.hypot(X - bx, Y - 2.5) - 2.25; if (d > 0.05) continue;
+    let c;
+    if (live) {
+      c = gal(buf, k);
+      c = mixc(c, mixc(P.bright, WHITE, 0.3), sstep(-0.5, 0, d) * 0.45);
+      c = mixc(c, WHITE, sat(-sdEllipse(X, Y, bx - 0.8, 1.6, 0.7, 0.35, -0.5) / 0.2) * 0.7);
+    } else c = mixc(rgb(14, 12, 30), rgb(40, 36, 70), sstep(-0.5, 0, d) * 0.6);
+    c = mixc(c, rgb(6, 4, 16), cov(Math.abs(d) - 0.12) * 0.9);
+    if (flash) c = mixc(c, WHITE, 0.4);
+    setPx(img, k, cov(d), c);
+  }
+  return toRGBA(img);
+};
+UI_STYLES.neonline = (kind, S, el, cols, t, mode, flash, seed) => {
+  const { W, H, P, buf, cov, img, live } = barStyleBase(S, el, cols, t, mode, seed);
+  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+    const k = j * W + i, X = (i + 0.5) / S, Y = (j + 0.5) / S, dy = Math.abs(Y - 2.5), ends = sstep(0, 1.2, Math.min(X, 182 - X));
+    let c, a;
+    if (live) {
+      const core = cov(dy - 0.55), glow = Math.exp(-(((dy - 0.55) / 0.9) ** 2)) * (dy > 0.55 ? 1 : 0);
+      c = mixc(mixc(P.bright, gal(buf, k), 0.35), WHITE, cov(dy - 0.2) * 0.6);
+      a = Math.max(core, glow * 0.75) * ends;
+      if (core < 0.5) c = mixc(P.cloud, P.bright, 0.5);
+    } else { c = rgb(28, 26, 52); a = cov(dy - 0.45) * 0.85 * ends; }
+    if (flash) c = mixc(c, WHITE, 0.4);
+    if (a > 0.003) setPx(img, k, a, c);
+  }
+  return toRGBA(img);
+};
+UI_STYLES.ribbon = (kind, S, el, cols, t, mode, flash, seed) => {
+  const { W, H, P, buf, cov, img, live } = barStyleBase(S, el, cols, t, mode, seed);
+  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+    const k = j * W + i, X = (i + 0.5) / S, Y = (j + 0.5) / S;
+    const yc = 2.5 + 1.05 * Math.sin(X * 0.3), th = 0.95 + 0.3 * Math.cos(X * 0.3), d = Math.max(Math.abs(Y - yc) - th, Math.max(-X, X - 182));
+    if (d > 0.05) continue;
+    const twist = 0.5 + 0.5 * Math.cos(X * 0.3);                                // the ribbon catches light as it turns
+    let c = live ? scale3(gal(buf, k), 0.75 + 0.5 * twist) : mixc(rgb(14, 12, 30), rgb(32, 28, 56), twist);
+    if (live) c = mixc(c, mixc(P.bright, WHITE, 0.35), cov(Math.abs(Y - (yc - th + 0.18)) - 0.1) * 0.7);
+    c = mixc(c, rgb(6, 4, 16), sstep(-0.22, -0.04, d) * 0.85);
+    if (flash) c = mixc(c, WHITE, 0.4);
+    setPx(img, k, cov(d), c);
+  }
+  return toRGBA(img);
+};
+UI_STYLES.pills = (kind, S, el, cols, t, mode, flash, seed) => {
+  const { W, H, P, buf, cov, img, live } = barStyleBase(S, el, cols, t, mode, seed), n = 10, step = 182 / n;
+  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+    const k = j * W + i, X = (i + 0.5) / S, Y = (j + 0.5) / S, bi = Math.min(n - 1, Math.floor(X / step)), bx = (bi + 0.5) * step;
+    const d = sdBox(X, Y, bx, 2.5, step / 2 - 1.0, 1.7, 1.7);
+    const glowA = live ? Math.exp(-Math.max(d, 0) / 0.55) * 0.55 * (d > 0 ? 1 : 0) : 0;
+    if (d > 0.05 && glowA < 0.01) continue;
+    let c, a;
+    if (d <= 0.05) {
+      if (live) { c = gal(buf, k); c = mixc(c, mixc(P.bright, WHITE, 0.25), sstep(-0.7, 0, d) * 0.6); c = mixc(c, WHITE, sstep(0.35, 0.05, Math.abs(Y - 1.35)) * 0.3 * cov(d + 0.4)); }
+      else c = mixc(rgb(14, 12, 30), rgb(44, 40, 76), sstep(-0.6, 0, d) * 0.7);
+      a = cov(d);
+    } else { c = P.bright; a = 0; }
+    if (glowA > a) { c = d > 0.05 ? P.bright : c; a = Math.max(a, glowA * sstep(0, 0.8, Math.min(X, 182 - X))); }
+    if (flash) c = mixc(c, WHITE, 0.4);
+    if (a > 0.003) setPx(img, k, a, c);
+  }
+  return toRGBA(img);
+};
+const XP_STYLE_NAMES = ["", "vial", "constellation", "mosaic", "rift", "celestial", "beads", "neonline", "ribbon", "pills"];
 /* =====================================================================
    PNG encoder + pack builder
    ===================================================================== */
@@ -2189,7 +2313,7 @@ const DEFAULTS = {
   xp: clone(EL_DEFAULTS.bar),
   boss: { c1: "#3c0a46", c2: "#b428a0", c3: "#ff6edc" },
   jump: { c1: "#5a2e06", c2: "#d28818", c3: "#ffe26e" },
-  bubble: { col: "#78c8ff" },
+  bubble: { col: "#78c8ff", style: "classic", accent: "#ffd27a", size: 1, rim: 1, shine: 1, alpha: 1 },
   cross: { col: "#ffffff", len: 4.5, thick: 1.0 },
   res: 256,
 };
@@ -2307,6 +2431,8 @@ function elSections(key, kind, name, cls) {
   if (kind !== "bar") shapeGroups.push({ label: "Draw my own", controls: [R(p("smooth"), "Corner smoothness", 0, 1, 0.01)] });
   shapeGroups.push({ label: kind === "bar" ? "Bar" : "Slider shape", controls: shapeCtl });
   return [
+    ...(kind === "bar" ? [{ id: "xp-style", tab: key, title: "XP bar style", cls, chips: "styles-xp",
+      hint: "A drawn style for the XP bar only, filled with your galaxy colours. \"Built from the cards\" uses the design, texture and border cards below.", groups: [] }] : []),
     { id: key + "-design", tab: key, title: name + ": start from a design", cls, chips: "designs-" + key,
       hint: "A design sets the texture, colours, border, shape and lighting together. Change any part of it in the cards below.", groups: [] },
     { id: key + "-texture", tab: key, title: name + " texture", cls, chips: "textures-" + key, groups: [{ controls: texCtl }] },
@@ -2374,8 +2500,14 @@ const SECTIONS = [
   ...elSections("heart", "heart", "Hearts", ""),
   ...elSections("armor", "armor", "Armor", ""),
   ...elSections("xp", "bar", "XP bar", "xp"),
-  { id: "other", tab: "other", title: "Air bubbles & crosshair", groups: [
-    { controls: [C("bubble.col", "Bubbles"), C("cross.col", "Crosshair")] },
+  { id: "bubbles", tab: "other", title: "Air bubbles", chips: [["styles-bubble", "Pick a bubble style"]],
+    hint: "Each style has a matching popping bubble for the last bit of air.", groups: [
+    { controls: [C("bubble.col", "Colour"), C("bubble.accent", "Accent (planet ring, soap tint)")] },
+    { controls: [R("bubble.size", "Size", 0.6, 1.25, 0.01), R("bubble.rim", "Rim thickness", 0.3, 2.5, 0.01),
+      R("bubble.shine", "Shine", 0, 1.5, 0.01), R("bubble.alpha", "Opacity", 0.2, 1, 0.01)] },
+  ] },
+  { id: "other", tab: "other", title: "Crosshair", groups: [
+    { controls: [C("cross.col", "Crosshair")] },
     { controls: [R("cross.len", "Crosshair size", 1.5, 7.5, 0.1), R("cross.thick", "Crosshair thickness", 0.4, 2.5, 0.05)] },
   ] },
 ];
@@ -2675,6 +2807,12 @@ chipSets["shapes-heart"] = { tab: "heart", kind: "heart", names: Object.keys(HEA
     Object.assign(h, clone(HEART_SHAPES[n].set), { posX: 0, tilt: 0, facets: 0, heartShape: n });
   },
   sel: () => st.heart.illus === "gemheart" ? "gemcut" : st.heart.heartShape || "" };
+chipSets["styles-bubble"] = { tab: "other", kind: "bubble", names: Object.keys(BUBBLE_STYLES), label: n => BUBBLE_STYLES[n],
+  render: n => bubbleIcon(12, false, st.bubble.col, Object.assign({}, st.bubble, { style: n })),
+  pick: n => { st.bubble.style = n; }, sel: () => st.bubble.style };
+chipSets["styles-xp"] = { tab: "xp", kind: "bar", names: XP_STYLE_NAMES, label: n => n ? UI_LABELS[n] : "Built from the cards",
+  render: n => elementIcon("bar", 3, Object.assign(clone(st.xp), { uiStyle: n }), st.xp, 0.2, "fill"),
+  pick: n => { st.xp.uiStyle = n; }, sel: () => st.xp.uiStyle || "" };
 const thumbs = [];
 for (const [set, cfg] of Object.entries(chipSets)) {
   for (const name of cfg.names) {
