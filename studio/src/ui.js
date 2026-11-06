@@ -145,7 +145,7 @@ UI_STYLES.mosaic = (kind, S, el, cols, t, mode, flash, seed) => {
 /* 4. Cosmic rift: a jagged, glowing tear in space with the galaxy behind it */
 /* Adjustable rift for the XP bar. Every variant is a set of these settings; the sliders change them. */
 const RIFT_BASE = { variant: "classic", width: 1.05, widthVar: 0.48, jag: 0.18, jagFreq: 1.4, sharp: 0, glow: 0.85, glowW: 0.25,
-  core: 1, inner: 1.15, wave: 0, zigzag: 0, twin: 0, breaks: 0, sparks: 0, pulse: 0, shift: 0, fadeEnds: 36,
+  core: 1, inner: 1.15, wave: 0, zigzag: 0, twin: 0, breaks: 0, sparks: 0, pulse: 0, shift: 0, fadeEnds: 70,
   custom: false, glowCol: "#5aa8ff", hotCol: "#dff4ff", shiftCol: "#b46cff" };
 const RIFT_VARIANTS = {
   classic: { label: "Cosmic rift" },
@@ -182,7 +182,7 @@ function riftBar(S, el, cols, t, mode, flash, seed) {
     const ends = sstep(0, 1.5, Math.min(X, 182 - X)); d = d + (1 - ends) * 1.5;
     const hm = R.shift > 0 ? (0.5 + 0.5 * Math.sin(X * 0.05 + TAU * t)) * R.shift : 0;
     const glowC = mixc(glowC0, sh, hm), hot = mixc(hot0, mixc(sh, WHITE, 0.5), hm * 0.6);
-    const lf = R.fadeEnds > 0 ? sstep(0, R.fadeEnds, Math.min(X, 182 - X)) ** 1.3 : 1;   // the coloured light fades out toward both ends
+    const lf = R.fadeEnds > 0 ? sstep(0, R.fadeEnds, Math.min(X, 182 - X)) ** 1.6 : 1;   // the coloured light fades out toward both ends
     let c = glowC, a = 0;
     if (d < 0) {
       if (live) { c = mixc(scale3(gal(buf, k), R.inner), hot, sat(Math.exp(d / 0.13) * R.core * pulse) * lf); a = cov(d); }
