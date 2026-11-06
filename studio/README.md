@@ -28,6 +28,7 @@ Edit the files in `src/`, run the script, then publish `studio/galaxy-gui-studio
 | `gh.js` | The framed gem heart traced from the ruby reference |
 | `ui.js` | The five HUD styles (vials, constellations, mosaic, rift, celestial) and the hardcore mark |
 | `hotbar.js` | Hotbar styles, the selected-slot frame, and the menu buttons, language and lock icons that share `widgets.png` |
+| `armor.js` | Cosmic armor: galaxy and rainbow armor in several shapes and finishes |
 | `png.js` | PNG encoder |
 | `themes.js` | Style list and the mini HUD previews |
 | `tail.js` | Settings, every control card, tabs, previews, saving and loading |

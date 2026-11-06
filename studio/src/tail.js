@@ -12,7 +12,7 @@ const DEFAULTS = {
   poison: { c1: "#0e3c18", c2: "#329638", c3: "#96f06e" },
   wither: { c1: "#121218", c2: "#403e4c", c3: "#828092" },
   gold: { c1: "#5a2e06", c2: "#d28818", c3: "#ffe26e" },
-  armor: clone(EL_DEFAULTS.armor),
+  armor: Object.assign(clone(EL_DEFAULTS.armor), { cosmic: clone(ARMOR_COSMIC_BASE) }),
   xp: Object.assign(clone(EL_DEFAULTS.bar), { loopSec: 4.8 }),
   boss: { c1: "#3c0a46", c2: "#b428a0", c3: "#ff6edc" },
   jump: { c1: "#5a2e06", c2: "#d28818", c3: "#ffe26e" },
@@ -231,6 +231,12 @@ const SECTIONS = [
     { label: "All styles", controls: [R("empty.alpha", "Overall opacity", 0, 1, 0.01), R("empty.size", "Size", 0.6, 1.1, 0.01)] },
   ] },
   ...elSections("heart", "heart", "Hearts", ""),
+  { id: "armor-cosmic", tab: "armor", title: "Galaxy & rainbow armor", cls: "", chips: [["armor-gal", "Galaxy armor"], ["armor-rb", "Rainbow armor"]],
+    hint: "Picking one switches the armor to these cosmic styles. Pick \"Built from the cards\" to go back to the design, texture and border cards further down.", groups: [] },
+  { id: "armor-cosmic-shape", tab: "armor", title: "Cosmic armor shape & finish", cls: "", chips: [["armor-shape", "Shape"], ["armor-finish", "Finish"]], groups: [
+    { controls: [R("armor.cosmic.outline", "Outline thickness", 0, 1.2, 0.01), R("armor.cosmic.shine", "Shine", 0, 1.5, 0.01), R("armor.cosmic.rim", "Edge light / neon glow", 0, 1.5, 0.01),
+      R("armor.cosmic.size", "Size", 0.75, 1.1, 0.01), R("armor.cosmic.rbAngle", "Rainbow direction", -90, 90, 1), R("armor.cosmic.emptyA", "Empty slot darkness", 0, 1, 0.01)] },
+    { controls: [C("armor.cosmic.outlineCol", "Outline")] }] },
   ...elSections("armor", "armor", "Armor", ""),
   ...elSections("xp", "bar", "XP bar", "xp"),
   { id: "hb-designs", tab: "hotbar", title: "Hotbar designs", cls: "", chips: "hb-designs",
@@ -632,6 +638,22 @@ chipSets["hb-shape"] = { tab: "hotbar", raw: true, names: Object.keys(HB_SHAPES)
   render: n => hbThumb(Object.assign(clone(st.hotbar), { slotShape: n })), pick: n => { st.hotbar.slotShape = n; }, sel: () => st.hotbar.slotShape };
 chipSets["hb-bar"] = { tab: "hotbar", raw: true, names: Object.keys(HB_BAR_SHAPES), label: n => HB_BAR_SHAPES[n],
   render: n => hbThumbWhole(Object.assign(clone(st.hotbar), { barShape: n })), pick: n => { st.hotbar.barShape = n; }, sel: () => st.hotbar.barShape };
+const cosmicArmor = over2 => Object.assign(clone(ARMOR_COSMIC_BASE), st.armor.cosmic || {}, over2);
+const armorFull = A => cosmicArmorIcon(12, A, "full");
+chipSets["armor-gal"] = { tab: "armor", names: ["", ...Object.keys(HB_GAL_VARIANTS)], label: n => n ? HB_GAL_VARIANTS[n].label : "Built from the cards",
+  render: n => n ? armorFull(cosmicArmor({ family: "galaxy", variant: n })) : elementIcon("armor", 12, Object.assign({}, st.armor, { uiStyle: "" }), st.armor, 0, "full"),
+  pick: n => { if (!n) { st.armor.uiStyle = ""; return; } st.armor.uiStyle = "cosmic"; st.armor.cosmic = cosmicArmor({ family: "galaxy", variant: n }); },
+  sel: () => st.armor.uiStyle !== "cosmic" ? (st.armor.uiStyle ? null : "") : st.armor.cosmic.family === "galaxy" ? st.armor.cosmic.variant : null };
+chipSets["armor-rb"] = { tab: "armor", names: ARMOR_RB_NAMES, label: n => HB_RB_VARIANTS[n].label,
+  render: n => armorFull(cosmicArmor(Object.assign({ family: "rainbow", variant: n }, n === "neon" ? { finish: "neon" } : {}))),
+  pick: n => { st.armor.uiStyle = "cosmic"; st.armor.cosmic = cosmicArmor(Object.assign({ family: "rainbow", variant: n }, n === "neon" ? { finish: "neon" } : {})); },
+  sel: () => st.armor.uiStyle === "cosmic" && st.armor.cosmic.family === "rainbow" ? st.armor.cosmic.variant : null };
+chipSets["armor-shape"] = { tab: "armor", names: Object.keys(ARMOR_SHAPES), label: n => ARMOR_SHAPES[n].label,
+  render: n => armorFull(cosmicArmor({ shape: n })), pick: n => { st.armor.uiStyle = "cosmic"; st.armor.cosmic.shape = n; },
+  sel: () => st.armor.uiStyle === "cosmic" ? st.armor.cosmic.shape : null };
+chipSets["armor-finish"] = { tab: "armor", names: Object.keys(ARMOR_FINISHES), label: n => ARMOR_FINISHES[n],
+  render: n => armorFull(cosmicArmor({ finish: n })), pick: n => { st.armor.uiStyle = "cosmic"; st.armor.cosmic.finish = n; },
+  sel: () => st.armor.uiStyle === "cosmic" ? st.armor.cosmic.finish : null };
 const thumbs = [];
 for (const [set, cfg] of Object.entries(chipSets)) {
   for (const name of cfg.names) {
