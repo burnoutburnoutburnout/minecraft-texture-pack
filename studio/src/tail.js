@@ -79,7 +79,7 @@ const D = (path, label, min, max, step) => ({ type: "deg", path, label, min, max
 const TG = (path, label) => ({ type: "toggle", path, label });
 const AN = (path, label) => ({ type: "angle", path, label, min: 0, max: 360, step: 1 });
 const SEL = (path, label, options) => ({ type: "select", path, label, options });
-const INT_PATHS = /(burnCount|facets|segments|wave\.1|dash|stitch|shoot)$/;
+const INT_PATHS = /(burnCount|facets|segments|wave\.1|dash|stitch|shoot|breaks|sparks)$/;
 
 function elSections(key, kind, name, cls) {
   const p = s => key + "." + s;
@@ -135,7 +135,16 @@ function elSections(key, kind, name, cls) {
   shapeGroups.push({ label: kind === "bar" ? "Bar" : "Slider shape", controls: shapeCtl });
   return [
     ...(kind === "bar" ? [{ id: "xp-style", tab: key, title: "XP bar style", cls, chips: "styles-xp",
-      hint: "A drawn style for the XP bar only, filled with your galaxy colours. \"Built from the cards\" uses the design, texture and border cards below.", groups: [] }] : []),
+      hint: "A drawn style for the XP bar only, filled with your galaxy colours. \"Built from the cards\" uses the design, texture and border cards below.", groups: [] },
+      { id: "xp-rift", tab: key, title: "Rift variants & settings", cls, chips: "rift-xp",
+        hint: "Pick a rift variant (this switches the XP bar to the rift style), then tune it with the sliders.", groups: [
+        { label: "Shape", controls: [R("xp.rift.width", "Thickness", 0.2, 2.2, 0.01), R("xp.rift.widthVar", "Thickness variation", 0, 1, 0.01),
+          R("xp.rift.jag", "Jagged edges", 0, 0.6, 0.01), R("xp.rift.jagFreq", "Jag detail", 0.5, 5, 0.05), R("xp.rift.sharp", "Sharp, crackly edges", 0, 1, 0.01),
+          R("xp.rift.wave", "Wave", 0, 1.4, 0.01), R("xp.rift.zigzag", "Zig-zag (lightning)", 0, 1.6, 0.01), R("xp.rift.twin", "Twin rifts gap (0 = one rift)", 0, 1.8, 0.01), R("xp.rift.breaks", "Breaks", 0, 14, 1)] },
+        { label: "Light", controls: [R("xp.rift.glow", "Glow", 0, 1.6, 0.01), R("xp.rift.glowW", "Glow width", 0.05, 0.8, 0.01), R("xp.rift.core", "Hot edge", 0, 2, 0.01),
+          R("xp.rift.inner", "Inside brightness", 0.2, 1.6, 0.01), R("xp.rift.pulse", "Flicker", 0, 1, 0.01), R("xp.rift.sparks", "Sparks", 0, 30, 1), R("xp.rift.shift", "Colour shift along the bar", 0, 1, 0.01)] },
+        { label: "Colours", controls: [TG("xp.rift.custom", "Use my own glow colours (otherwise the galaxy colours)"), C("xp.rift.glowCol", "Glow"), C("xp.rift.hotCol", "Hot edge"), C("xp.rift.shiftCol", "Shift colour")] },
+      ] }] : []),
     { id: key + "-design", tab: key, title: name + ": start from a design", cls, chips: "designs-" + key,
       hint: "A design sets the texture, colours, border, shape and lighting together. Change any part of it in the cards below.", groups: [] },
     { id: key + "-texture", tab: key, title: name + " texture", cls, chips: "textures-" + key, groups: [{ controls: texCtl }] },
@@ -516,6 +525,9 @@ chipSets["styles-bubble"] = { tab: "other", kind: "bubble", names: Object.keys(B
 chipSets["styles-xp"] = { tab: "xp", kind: "bar", names: XP_STYLE_NAMES, label: n => n ? UI_LABELS[n] : "Built from the cards",
   render: n => elementIcon("bar", 3, Object.assign(clone(st.xp), { uiStyle: n }), st.xp, 0.2, "fill"),
   pick: n => { st.xp.uiStyle = n; }, sel: () => st.xp.uiStyle || "" };
+chipSets["rift-xp"] = { tab: "xp", kind: "bar", names: Object.keys(RIFT_VARIANTS), label: n => RIFT_VARIANTS[n].label,
+  render: n => elementIcon("bar", 3, Object.assign(clone(st.xp), { uiStyle: "rift", rift: riftParams(n) }), st.xp, 0.2, "fill"),
+  pick: n => { st.xp.uiStyle = "rift"; st.xp.rift = riftParams(n); }, sel: () => st.xp.uiStyle === "rift" ? (st.xp.rift || {}).variant || "classic" : "" };
 const thumbs = [];
 for (const [set, cfg] of Object.entries(chipSets)) {
   for (const name of cfg.names) {

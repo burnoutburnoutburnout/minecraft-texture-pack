@@ -143,7 +143,62 @@ UI_STYLES.mosaic = (kind, S, el, cols, t, mode, flash, seed) => {
 };
 
 /* 4. Cosmic rift: a jagged, glowing tear in space with the galaxy behind it */
+/* Adjustable rift for the XP bar. Every variant is a set of these settings; the sliders change them. */
+const RIFT_BASE = { variant: "classic", width: 1.05, widthVar: 0.48, jag: 0.18, jagFreq: 1.4, sharp: 0, glow: 0.85, glowW: 0.25,
+  core: 1, inner: 1.15, wave: 0, zigzag: 0, twin: 0, breaks: 0, sparks: 0, pulse: 0, shift: 0,
+  custom: false, glowCol: "#5aa8ff", hotCol: "#dff4ff", shiftCol: "#b46cff" };
+const RIFT_VARIANTS = {
+  classic: { label: "Cosmic rift" },
+  lightning: { label: "Lightning", width: 0.38, widthVar: 0.25, jag: 0.03, jagFreq: 2, zigzag: 1.15, glow: 1.1, glowW: 0.28, core: 1.8, inner: 1.3, pulse: 0.6, custom: true, glowCol: "#6fb8ff", hotCol: "#f2f9ff" },
+  ember: { label: "Ember", width: 0.9, jag: 0.22, jagFreq: 1.8, glow: 0.95, glowW: 0.3, core: 1.2, sparks: 16, custom: true, glowCol: "#ff6a1a", hotCol: "#ffd27a" },
+  void: { label: "Void tear", width: 1.55, widthVar: 0.3, jag: 0.26, jagFreq: 2.2, sharp: 0.4, inner: 0.45, core: 0.55, glow: 0.65, glowW: 0.18, custom: true, glowCol: "#7a3cff", hotCol: "#d8b6ff" },
+  twin: { label: "Twin rift", width: 0.45, widthVar: 0.4, jag: 0.12, glow: 0.75, glowW: 0.2, twin: 1.25 },
+  shattered: { label: "Shattered", width: 1.1, jag: 0.24, jagFreq: 2, sharp: 0.6, breaks: 7, glow: 0.85 },
+  aurora: { label: "Aurora", width: 0.95, widthVar: 0.3, jag: 0.1, glow: 1.15, glowW: 0.42, shift: 1, custom: true, glowCol: "#3ee0b4", hotCol: "#e6fff8", shiftCol: "#b46cff" },
+  wave: { label: "Wave", width: 0.75, widthVar: 0.2, jag: 0.08, wave: 0.95, glow: 0.8, glowW: 0.28 },
+};
+const riftParams = name => Object.assign(clone(RIFT_BASE), clone(RIFT_VARIANTS[name] || {}), { variant: name });
+function riftBar(S, el, cols, t, mode, flash, seed) {
+  const live = isLive(mode), { W, H, P, buf, cov, img } = uiBase("bar", S, el, cols, t, seed, live), R = Object.assign(clone(RIFT_BASE), el.rift || {});
+  const glowC0 = R.custom ? unhex(R.glowCol) : mixc(P.cloud, P.bright, 0.5), hot0 = R.custom ? unhex(R.hotCol) : mixc(P.bright, WHITE, 0.55), sh = unhex(R.shiftCol);
+  const pulse = 1 + R.pulse * 0.35 * (Math.sin(TAU * 3 * t) * 0.6 + Math.sin(TAU * 7 * t + 1.3) * 0.4);
+  const sparks = [];
+  for (let n = 0; n < R.sparks; n++) { const h1 = uhash(n, seed, 1), h2 = uhash(n, seed, 2), k = 1 + (n % 3);
+    const ph = fract(t * k + h2); sparks.push([h1 * 182, ph, Math.sin(Math.PI * ph)]); }
+  const rifts = R.twin > 0 ? [-R.twin, R.twin] : [0];
+  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+    const k = j * W + i, X = (i + 0.5) / S, Y = (j + 0.5) / S;
+    let hw = R.width * (1 + R.widthVar * vfbm(X * 0.45 + 7, 3.1, 3));
+    if (R.breaks > 0) { const seg = 182 / R.breaks, q = fract(X / seg + 0.5 / R.breaks * 0), dist = Math.min(q, 1 - q) * seg; hw *= sstep(0.4, 2.4, dist); }
+    let n = vfbm(X * R.jagFreq, Y * 2, 2);
+    if (R.sharp > 0) n = lerp(n, 1 - 2 * Math.abs(vnoise(X * R.jagFreq * 1.7 + 3, Y * 3)), R.sharp);
+    let d = 9;
+    let zz = 0;
+    if (R.zigzag > 0) {                                                  // lightning path: straight segments with sharp corners
+      const z1 = X / 3.2, k1 = Math.floor(z1), f1 = z1 - k1, z2 = X / 0.9, k2 = Math.floor(z2), f2 = z2 - k2;
+      zz = R.zigzag * (lerp(uhash(k1, seed, 7), uhash(k1 + 1, seed, 7), f1) * 2 - 1) + R.zigzag * 0.25 * (lerp(uhash(k2, seed, 8), uhash(k2 + 1, seed, 8), f2) * 2 - 1);
+    }
+    for (const off of rifts) { const yc = 2.5 + off + zz + R.wave * Math.sin(X * 0.12 + 0.7); d = Math.min(d, Math.abs(Y - yc) - hw + R.jag * n); }
+    const ends = sstep(0, 1.5, Math.min(X, 182 - X)); d = d + (1 - ends) * 1.5;
+    const hm = R.shift > 0 ? (0.5 + 0.5 * Math.sin(X * 0.05 + TAU * t)) * R.shift : 0;
+    const glowC = mixc(glowC0, sh, hm), hot = mixc(hot0, mixc(sh, WHITE, 0.5), hm * 0.6);
+    let c = glowC, a = 0;
+    if (d < 0) {
+      if (live) { c = mixc(scale3(gal(buf, k), R.inner), hot, sat(Math.exp(d / 0.13) * R.core * pulse)); a = cov(d); }
+      else { c = mixc(rgb(12, 8, 22), scale3(glowC, 0.5), Math.exp(d / 0.12) * 0.5); a = cov(d) * 0.9; }
+    }
+    if (d > 0) { const ga = (live ? R.glow * pulse : 0.25) * Math.exp(-d / Math.max(0.05, R.glowW)); if (ga > a) { c = mixc(glowC, hot, Math.exp(-d / 0.08)); a = Math.max(a, sat(ga)); } }
+    if (live) for (const [sx, ph, f] of sparks) {                  // embers drifting up from the rift
+      const sy = 2.5 - hw * 0.4 - ph * 2.2, dd = Math.hypot((X - sx) * 0.8, Y - sy);
+      if (dd < 0.6) { const v = Math.exp(-((dd / 0.18) ** 2)) * f; c = mixc(c, hot, sat(v * 1.5)); a = Math.max(a, sat(v)); }
+    }
+    if (flash) c = mixc(c, WHITE, 0.4);
+    if (a > 0.003) setPx(img, k, a, c);
+  }
+  return toRGBA(img);
+}
 UI_STYLES.rift = (kind, S, el, cols, t, mode, flash, seed) => {
+  if (kind === "bar") return riftBar(S, el, cols, t, mode, flash, seed);
   const live = isLive(mode), { E, W, H, P, buf, cov, img } = uiBase(kind, S, el, cols, t, seed, live);
   const bar = kind === "bar", hot = mixc(P.bright, WHITE, 0.55), glowC = mixc(P.cloud, P.bright, 0.5);
   const base = (X, Y) => kind === "heart" ? hsd(X, Y, 0.82) : kind === "armor" ? asd(X, Y, 0.84) : Math.abs(Y - 2.5) - (1.05 + 0.5 * vfbm(X * 0.45 + 7, 3.1, 3));

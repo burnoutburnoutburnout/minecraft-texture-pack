@@ -59,7 +59,8 @@ const EL_DEFAULTS = {
     emptyCol: "#0a0612", emptyOutline: "#040208", w: 1, h: 1, round: 0, tip: 1, cleft: 0 }),
   armor: Object.assign(clone(EL_COMMON), { c1: "#18225a", c2: "#5060be", c3: "#bec8ff", outlineCol: "#0a081e", emptyCol: "#1a142a",
     shine: 0, shoulder: 3.4, neckW: 1.3, neckD: 1.3, sleeve: 4.0, sleeveY: -0.45, armpit: 2.4, waist: 2.4, top: -3.75, bottom: 3.75, round: 0 }),
-  bar: Object.assign(clone(EL_COMMON), { c1: "#0a1e58", c2: "#246ed6", c3: "#6ee8ff", outlineCol: "#060c22", bgCol: "#08081a",
+  bar: Object.assign(clone(EL_COMMON), { rift: { variant: "classic", width: 1.05, widthVar: 0.48, jag: 0.18, jagFreq: 1.4, sharp: 0, glow: 0.85, glowW: 0.25,
+    core: 1, inner: 1.15, wave: 0, zigzag: 0, twin: 0, breaks: 0, sparks: 0, pulse: 0, shift: 0, custom: false, glowCol: "#5aa8ff", hotCol: "#dff4ff", shiftCol: "#b46cff" }, c1: "#0a1e58", c2: "#246ed6", c3: "#6ee8ff", outlineCol: "#060c22", bgCol: "#08081a",
     outline: 0.45, shine: 0.06, shineX: 0, shineY: -1.25, barH: 5, radius: 1.6, slant: 0, taper: 0, segments: 0, segGap: 0.6 }),
 };
 /* angular, gem-cut heart outline: straight sides, chamfered lobes and a sharp V notch */
