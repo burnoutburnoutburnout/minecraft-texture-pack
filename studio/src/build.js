@@ -81,6 +81,9 @@ async function buildPack(progress) {
     zip.file(anim + "hotbar.properties", props("hotbar.png", 0, 0, bw, bh, BA.dur, hb.animFps === "smooth").replace("textures/gui/icons.png", "textures/gui/widgets.png"));
     zip.file(anim + "hotbar_sel.properties", props("hotbar_sel.png", 0, 22 * S, sw, sw, BA.dur, hb.animFps === "smooth").replace("textures/gui/icons.png", "textures/gui/widgets.png"));
   }
+  // item size: copies of the item models with a scaled "gui" display (hotbar, inventory and chests)
+  const isc = +st.itemScale || 1;
+  if (Math.abs(isc - 1) > 0.004) for (const name of Object.keys(ITEM_MODELS)) zip.file("assets/minecraft/models/item/" + name + ".json", itemModelJSON(name, isc));
   progress(1, "Zipping…"); await pause();
   return zip.generateAsync({ type: "blob", compression: "STORE" });
 }

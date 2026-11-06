@@ -29,6 +29,7 @@ Edit the files in `src/`, run the script, then publish `studio/galaxy-gui-studio
 | `ui.js` | The five HUD styles (vials, constellations, mosaic, rift, celestial) and the hardcore mark |
 | `hotbar.js` | Hotbar styles, the selected-slot frame, and the menu buttons, language and lock icons that share `widgets.png` |
 | `armor.js` | Cosmic armor: galaxy and rainbow armor in several shapes and finishes |
+| `itemmodels.js` | The 1.8.9 item models (compact copy of `assets/minecraft/models/item` from the 1.8.9 client), used to write item models with a scaled `gui` display for the item size setting |
 | `png.js` | PNG encoder |
 | `themes.js` | Style list and the mini HUD previews |
 | `tail.js` | Settings, every control card, tabs, previews, saving and loading |

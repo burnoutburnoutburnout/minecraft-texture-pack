@@ -18,7 +18,7 @@ const DEFAULTS = {
   jump: { c1: "#5a2e06", c2: "#d28818", c3: "#ffe26e" },
   bubble: { col: "#78c8ff", style: "classic", accent: "#ffd27a", size: 1, rim: 1, shine: 1, alpha: 1 },
   cross: { col: "#ffffff", len: 4.5, thick: 1.0 },
-  hotbar: clone(HB_DEFAULTS),
+  hotbar: clone(HB_DEFAULTS), itemScale: 1,
   res: 128, perf: { preset: "light", animHearts: true, animHardcore: true, animXP: true, animHotbar: true },
 };
 const KEY = "galaxy-gui-studio-v4";
@@ -239,6 +239,9 @@ const SECTIONS = [
     { controls: [C("armor.cosmic.outlineCol", "Outline")] }] },
   ...elSections("armor", "armor", "Armor", ""),
   ...elSections("xp", "bar", "XP bar", "xp"),
+  { id: "hb-items", tab: "hotbar", title: "Item and slot size", cls: "",
+    hint: "Item size changes how big items and blocks are drawn in the hotbar, and also in your inventory, chests and crafting table (the game uses one setting for all of them). It works with any hotbar style, even with the hotbar turned off.", groups: [
+    { controls: [R("itemScale", "Item size (1 = normal)", 0.5, 1.3, 0.01), R("hotbar.window", "Slot box size", -4, 1.6, 0.05), R("hotbar.selScale", "Selected frame size", 0.6, 1, 0.01)] }] },
   { id: "hb-designs", tab: "hotbar", title: "Hotbar designs", cls: "", chips: "hb-designs",
     hint: "Complete looks that mix a style, shape, bar outline, turn pattern and size pattern. Pick one, then change anything in the cards below.", groups: [] },
   { id: "hb-style", tab: "hotbar", title: "Hotbar style", cls: "", chips: "styles-hotbar",
@@ -256,7 +259,7 @@ const SECTIONS = [
     hint: "Items always sit in the same place; shapes are fitted inside each slot. The selected-slot frame takes the same shape, slant and spin, and the turn too unless every slot is turned differently (fan, random, wave).", groups: [
     { label: "Turn", controls: [SEL("hotbar.rotMode", "Turn pattern", Object.entries(HB_ROT_MODES)), R("hotbar.rot", "Turn amount (degrees)", -90, 90, 1),
       R("hotbar.spin", "Spin (turns per loop, minus = other way)", -3, 3, 1)] },
-    { label: "Lean & size", controls: [R("hotbar.skew", "Slant", -0.6, 0.6, 0.01), SEL("hotbar.sizeMode", "Size pattern", Object.entries(HB_SIZE_MODES)), R("hotbar.window", "Slot size", -0.5, 1.4, 0.01)] }] },
+    { label: "Lean & size", controls: [R("hotbar.skew", "Slant", -0.6, 0.6, 0.01), SEL("hotbar.sizeMode", "Size pattern", Object.entries(HB_SIZE_MODES))] }] },
   { id: "hb-sel", tab: "hotbar", title: "Selected slot frame", cls: "", chips: "styles-hbsel", groups: [
     { controls: [C("hotbar.selCol", "Frame colour")] },
     { controls: [R("hotbar.selW", "Frame thickness", 1, 3.7, 0.05), R("hotbar.selGlow", "Glow", 0, 1.5, 0.01), R("hotbar.pulse", "Pulse", 0, 1, 0.01), R("hotbar.orbit", "Orbiting stars", 1, 4, 1)] }] },
@@ -869,7 +872,8 @@ function drawHud(now) {
       hctx.drawImage(pv.hbBar[ready ? hbf : 0], x0, hbY, 182 * g, 22 * g);
       if (ready && hba > 0) { hctx.globalAlpha = hba; hctx.drawImage(pv.hbBar[hbn], x0, hbY, 182 * g, 22 * g); hctx.globalAlpha = 1; }
     } else { hctx.fillStyle = "rgba(0,0,0,0.45)"; hctx.fillRect(x0, hbY, 182 * g, 22 * g); }
-    for (const s2 of [1, 3]) hctx.drawImage(pv.steak, x0 + (3 + 20 * s2) * g, hbY + 3 * g, 16 * g, 16 * g);
+    const isc = +st.itemScale || 1;                                       // item size, scaled about the slot centre like the game
+    for (const s2 of [1, 3]) hctx.drawImage(pv.steak, x0 + (11 + 20 * s2 - 8 * isc) * g, hbY + (11 - 8 * isc) * g, 16 * isc * g, 16 * isc * g);
     if (pv.hbOn) { const ready = pv.hbBar.length === pv.hbN; hctx.drawImage(pv.hbSel[ready ? hbf : 0], x0 + (20 - 1) * g, hbY - g, 24 * g, 24 * g);
       if (ready && hba > 0) { hctx.globalAlpha = hba; hctx.drawImage(pv.hbSel[hbn], x0 + 19 * g, hbY - g, 24 * g, 24 * g); hctx.globalAlpha = 1; } }
     // measured preview frame rate

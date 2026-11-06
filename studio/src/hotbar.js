@@ -92,7 +92,7 @@ const HB_DEFAULTS = { enabled: true, style: "galaxy", selStyle: "auto", buttons:
   c1: "#160c46", c2: "#4a2ab8", c3: "#9c6cff", accent: "#b48cff", selCol: "#efe4ff", slotCol: "#0a0814", outlineCol: "#05030c", goldCol: "#e0b04a",
   slotA: 0.7, railA: 1, window: 0.6, round: 0.15, frameW: 0.5, glow: 0.8, shine: 0.6, stars: 1, texScale: 1,
   pulse: 0.5, selW: 2.4, selGlow: 0.9, orbit: 1, speed: 2, loopSec: 6, animFps: "ticks", motion: "random", shoot: 1,
-  slotShape: "square", barShape: "box", rot: 0, alt: false, spin: 0, rotMode: "same", sizeMode: "even", skew: 0, gal: clone(HB_GAL_BASE), rb: clone(HB_RB_BASE) };
+  slotShape: "square", barShape: "box", rot: 0, alt: false, spin: 0, rotMode: "same", sizeMode: "even", skew: 0, selScale: 1, gal: clone(HB_GAL_BASE), rb: clone(HB_RB_BASE) };
 const hbStill = hb => ["stone"].includes(hb.style) && hbSelStyle(hb) === "stone" && !(+hb.spin);
 const hbSelStyle = hb => hb.selStyle === "auto" ? HB_AUTO_SEL[hb.style] || "glow" : hb.selStyle;
 function hsv(h, sv, v) {
@@ -330,7 +330,7 @@ function hotbarSelIcon(S, hb, t) {
   const G = hbSlotGeo(hb, t), shape = G.shape, SH = G.SH, spin = Math.round(+hb.spin || 0), kS = G.k;
   const a = ["same", "alternate", "rock"].includes(G.mode) ? G.angs[0] : G.spinA, ca = Math.cos(a), sa = Math.sin(a);
   const e1 = spin || G.mode === "rock" ? [shapeR(shape, kS), shapeR(shape, kS)] : shapeExt(shape, 1, a, kS), ef = Math.max(e1[0], e1[1]);
-  const ho = 11.8 / ef, hh = Math.max(ho * 0.55, ho - hb.selW / ef), hm = (ho + hh) / 2, roundK = hb.round;
+  const ho = 11.8 / ef * Math.min(1, Math.max(0.5, +hb.selScale || 1)), hh = Math.max(ho * 0.55, ho - hb.selW / ef), hm = (ho + hh) / 2, roundK = hb.round;
   const pulse = 1 + hb.pulse * 0.4 * Math.sin(TAU * 2 * t), squareish = shape === "square";
   for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
     const k = j * W + i, X = (i + 0.5) / S, Y = (j + 0.5) / S, p = px0();
