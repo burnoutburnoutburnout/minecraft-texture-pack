@@ -84,6 +84,13 @@ async function buildPack(progress) {
   // item size: copies of the item models with a scaled "gui" display (hotbar, inventory and chests)
   const isc = +st.itemScale || 1;
   if (Math.abs(isc - 1) > 0.004) for (const name of Object.keys(ITEM_MODELS)) zip.file("assets/minecraft/models/item/" + name + ".json", itemModelJSON(name, isc));
+  // animated crosshair: a strip copied onto the top-left of icons.png
+  if (crossAnimated(st.cross)) {
+    const CA = animFrames(st.cross, "cross", st.res), cw = 16 * S, cs = new Uint8ClampedArray(cw * cw * CA.n * 4);
+    for (let f = 0; f < CA.n; f++) cs.set(crosshairIcon(S, st.cross, f / CA.n).data, f * cw * cw * 4);
+    zip.file(anim + "crosshair.png", encodePNG(cs, cw, cw * CA.n));
+    zip.file(anim + "crosshair.properties", props("crosshair.png", 0, 0, cw, cw, CA.dur, st.cross.animFps === "smooth"));
+  }
   progress(1, "Zipping…"); await pause();
   return zip.generateAsync({ type: "blob", compression: "STORE" });
 }

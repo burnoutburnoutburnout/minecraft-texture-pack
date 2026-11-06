@@ -20,7 +20,7 @@ Edit the files in `src/`, run the script, then publish `studio/galaxy-gui-studio
 | --- | --- |
 | `head.html` | Title, styles, page layout and the Build card (including saved setups) |
 | `core1.js` | Maths, tiling noise, signed distance functions, stars and the starfield, including random motion and shooting stars |
-| `mid.js` | Colour helpers, air bubbles, crosshair, ping icons |
+| `mid.js` | Colour helpers, air bubbles, ping icons |
 | `steak.js` | Steak designs, textures, borders, shape editor geometry, empty-slot styles, and `steakIcon()` |
 | `photo.js`, `pan.js` | Photo-real grilled steak and pan-seared ribeye |
 | `smooth.js`, `slab.js` | Smooth and Smooth grilled steaks (traced from reference screenshots) |
@@ -29,6 +29,7 @@ Edit the files in `src/`, run the script, then publish `studio/galaxy-gui-studio
 | `ui.js` | The five HUD styles (vials, constellations, mosaic, rift, celestial) and the hardcore mark |
 | `hotbar.js` | Hotbar styles, the selected-slot frame, and the menu buttons, language and lock icons that share `widgets.png` |
 | `armor.js` | Cosmic armor: galaxy and rainbow armor in several shapes and finishes |
+| `crosshair.js` | Crosshair parts, presets, fills and animation (1.8.9 draws the crosshair with an inverting blend, so colour is stored multiplied by alpha) |
 | `itemmodels.js` | The 1.8.9 item models (compact copy of `assets/minecraft/models/item` from the 1.8.9 client), used to write item models with a scaled `gui` display for the item size setting |
 | `png.js` | PNG encoder |
 | `themes.js` | Style list and the mini HUD previews |

@@ -17,7 +17,7 @@ const DEFAULTS = {
   boss: { c1: "#3c0a46", c2: "#b428a0", c3: "#ff6edc" },
   jump: { c1: "#5a2e06", c2: "#d28818", c3: "#ffe26e" },
   bubble: { col: "#78c8ff", style: "classic", accent: "#ffd27a", size: 1, rim: 1, shine: 1, alpha: 1 },
-  cross: { col: "#ffffff", len: 4.5, thick: 1.0 },
+  cross: clone(CROSS_BASE), pvCrossInvert: true,
   hotbar: clone(HB_DEFAULTS), itemScale: 1,
   res: 128, perf: { preset: "light", animHearts: true, animHardcore: true, animXP: true, animHotbar: true },
 };
@@ -98,7 +98,7 @@ function fpsInfoText(el, kind) {
   if (el.animFps === "smooth") s += " Smoothing blends between frames, so motion looks fluid at your monitor's refresh rate.";
   return s;
 }
-const INT_PATHS = /(burnCount|facets|segments|wave\.1|dash|stitch|shoot|breaks|sparks|spin|cycles)$/;
+const INT_PATHS = /(burnCount|facets|segments|wave\.1|dash|stitch|shoot|breaks|sparks|spin|cycles|ringSegs)$/;
 
 function elSections(key, kind, name, cls) {
   const p = s => key + "." + s;
@@ -283,12 +283,28 @@ const SECTIONS = [
     { controls: [R("bubble.size", "Size", 0.6, 1.25, 0.01), R("bubble.rim", "Rim thickness", 0.3, 2.5, 0.01),
       R("bubble.shine", "Shine", 0, 1.5, 0.01), R("bubble.alpha", "Opacity", 0.2, 1, 0.01)] },
   ] },
-  { id: "other", tab: "other", title: "Crosshair", groups: [
-    { controls: [C("cross.col", "Crosshair")] },
-    { controls: [R("cross.len", "Crosshair size", 1.5, 7.5, 0.1), R("cross.thick", "Crosshair thickness", 0.4, 2.5, 0.05)] },
-  ] },
+  { id: "cross-presets", tab: "crosshair", title: "Crosshair styles", cls: "", chips: "cross-presets",
+    hint: "Minecraft 1.8.9 draws the crosshair by inverting what is behind it: white shows as the opposite of the background, colours are mixed with it, and black or dark parts disappear. The previews here are drawn the same way. Pick a style, then change any part below.", groups: [
+    { controls: [TG("pvCrossInvert", "Preview with the game's colour inversion")] }] },
+  { id: "cross-parts", tab: "crosshair", title: "Crosshair parts", cls: "", groups: [
+    { label: "Lines", controls: [TG("cross.arms", "Lines"), SEL("cross.armMode", "Line layout", Object.entries(CROSS_ARM_MODES)), R("cross.len", "Length", 0.5, 7.5, 0.05),
+      R("cross.thick", "Thickness", 0.3, 3, 0.05), R("cross.gap", "Gap in the middle", 0, 6, 0.05), R("cross.armRound", "Rounded ends", 0, 1, 0.01), R("cross.taper", "Pointed ends", 0, 1, 0.01)] },
+    { label: "Dot", controls: [TG("cross.dot", "Centre dot"), R("cross.dotSize", "Dot size", 0.2, 3, 0.05), SEL("cross.dotShape", "Dot shape", [["round", "Round"], ["square", "Square"], ["diamond", "Diamond"]])] },
+    { label: "Circle", controls: [TG("cross.ring", "Circle"), R("cross.ringR", "Circle size", 1, 7.4, 0.05), R("cross.ringThick", "Circle thickness", 0.3, 2.5, 0.05),
+      R("cross.ringSegs", "Dashes (0 = solid)", 0, 16, 1), R("cross.ringFill", "Dash length", 0.05, 0.95, 0.01)] },
+    { label: "Brackets", controls: [TG("cross.brackets", "Corner brackets"), R("cross.brSize", "Bracket spread", 2, 7.4, 0.05), R("cross.brLen", "Bracket length", 0.5, 5, 0.05), R("cross.brThick", "Bracket thickness", 0.3, 2, 0.05)] },
+    { label: "Diamond & chevron", controls: [TG("cross.diamond", "Diamond"), R("cross.diaSize", "Diamond size", 1.5, 7, 0.05), R("cross.diaThick", "Diamond thickness", 0.3, 2, 0.05),
+      TG("cross.chevron", "Chevron (^)"), R("cross.chevSize", "Chevron size", 1, 5, 0.05), R("cross.chevThick", "Chevron thickness", 0.3, 2, 0.05), R("cross.chevY", "Chevron position", -4, 5, 0.05)] },
+    { label: "Whole crosshair", controls: [R("cross.rot", "Rotation (degrees)", -180, 180, 1), R("cross.scale", "Size", 0.5, 1.5, 0.01), R("cross.opacity", "Strength", 0.2, 1, 0.01)] }] },
+  { id: "cross-look", tab: "crosshair", title: "Crosshair colour & animation", cls: "", groups: [
+    { label: "Colour", controls: [SEL("cross.fill", "Fill", [["solid", "One colour"], ["rainbow", "Rainbow"], ["galaxy", "Galaxy"]]), C("cross.col", "Colour"),
+      SEL("cross.galVariant", "Galaxy", Object.keys(HB_GAL_VARIANTS).map(n => [n, HB_GAL_VARIANTS[n].label])), R("cross.rbSat", "Rainbow strength", 0, 1, 0.01)] },
+    { label: "Animation (OptiFine)", controls: [SEL("cross.anim", "Animation", Object.entries(CROSS_ANIMS)), R("cross.spin", "Spins per loop (minus = other way)", -3, 3, 1),
+      R("cross.pulse", "Pulse amount", 0, 0.6, 0.01), R("cross.cycles", "Rainbow cycles per loop", 1, 4, 1), SEL("cross.speed", "Frame rate (FPS)", FPS_OPTIONS),
+      R("cross.loopSec", "Loop length in seconds", 0.5, 8, 0.1), SEL("cross.animFps", "Smoothing", [["ticks", "Off (lightest)"], ["smooth", "Blend frames (smooth)"]]),
+      { type: "info", path: "cross.fpsInfo", kind: "cross" }] }] },
 ];
-const TABS = [["themes", "Styles"], ["steak", "Steak"], ["heart", "Hearts"], ["armor", "Armor"], ["xp", "XP bar"], ["hotbar", "Hotbar"], ["other", "Other HUD"]];
+const TABS = [["themes", "Styles"], ["steak", "Steak"], ["heart", "Hearts"], ["armor", "Armor"], ["xp", "XP bar"], ["hotbar", "Hotbar"], ["crosshair", "Crosshair"], ["other", "Other HUD"]];
 const $ = id => document.getElementById(id);
 
 /* ---------- outline editors (steak, hearts, armor) ---------- */
@@ -657,6 +673,16 @@ chipSets["armor-shape"] = { tab: "armor", names: Object.keys(ARMOR_SHAPES), labe
 chipSets["armor-finish"] = { tab: "armor", names: Object.keys(ARMOR_FINISHES), label: n => ARMOR_FINISHES[n],
   render: n => armorFull(cosmicArmor({ finish: n })), pick: n => { st.armor.uiStyle = "cosmic"; st.armor.cosmic.finish = n; },
   sel: () => st.armor.uiStyle === "cosmic" ? st.armor.cosmic.finish : null };
+function crossThumb(c) {                   // the crosshair over sky, grass and stone, drawn the way the game draws it
+  const cv = document.createElement("canvas"); cv.width = 112; cv.height = 112; const g = cv.getContext("2d");
+  g.fillStyle = "#8fb8e8"; g.fillRect(0, 0, 112, 50); g.fillStyle = "#5d8a3a"; g.fillRect(0, 50, 112, 34); g.fillStyle = "#7a7a7a"; g.fillRect(0, 84, 112, 28);
+  g.globalCompositeOperation = st.pvCrossInvert !== false ? "exclusion" : "source-over";
+  g.drawImage(toCanvas(crosshairIcon(6, c, 0.15)), 8, 8); g.globalCompositeOperation = "source-over";
+  return cv;
+}
+chipSets["cross-presets"] = { tab: "crosshair", raw: true, names: Object.keys(CROSS_PRESETS), label: n => CROSS_PRESETS[n].label,
+  key: () => JSON.stringify([CROSS_KEEP.map(k => st.cross[k]), st.pvCrossInvert]), render: n => crossThumb(crossPreset(st.cross, n)),
+  pick: n => { st.cross = crossPreset(st.cross, n); }, sel: () => st.cross.preset || "" };
 const thumbs = [];
 for (const [set, cfg] of Object.entries(chipSets)) {
   for (const name of cfg.names) {
@@ -819,7 +845,7 @@ function buildPreviewInner() {
   for (let f = 0; f < XP_FRAMES; f++) xp.push(toCanvas(BAR(PS, f / XP_FRAMES, "fill")));
   pv = { baseKey, hearts, xp, hbBar, hbSel, hbN, hbOn: hb.enabled, cont: toCanvas(HRT(PS, 0, "container")), xpbg: toCanvas(BAR(PS, 0, "bg")),
     bossbg: toCanvas(BAR(PS, 0, "bg", st.boss, 8, false)), boss: toCanvas(BAR(PS, 0, "fill", st.boss, 8, false)),
-    cross: toCanvas(crosshairIcon(PS, st.cross)), bubble: toCanvas(bubbleIcon(PS, false, st.bubble.col)), pop: toCanvas(bubbleIcon(PS, true, st.bubble.col)),
+    cross: toCanvas(crosshairIcon(PS, st.cross)), crossF: crossAnimated(st.cross) ? Array.from({ length: Math.min(animFrames(st.cross, "cross").n, 48) }, (_, f, ) => toCanvas(crosshairIcon(PS, st.cross, f / Math.min(animFrames(st.cross, "cross").n, 48)))) : null, bubble: toCanvas(bubbleIcon(PS, false, st.bubble.col)), pop: toCanvas(bubbleIcon(PS, true, st.bubble.col)),
     steak: toCanvas(steakIcon(PS, st, "full")), steakHalf: toCanvas(steakIcon(PS, st, "half")), steakCont: toCanvas(steakIcon(PS, st, "container")),
     armor: ["empty", "half", "full"].map(k => toCanvas(ARM(PS, k))) };
   drawInto("bigHeart", HRT(40, 0.1));
@@ -854,7 +880,10 @@ function drawHud(now) {
     hctx.drawImage(ground, 0, 0);
     const x0 = (1600 - 182 * g) / 2;
     hctx.drawImage(pv.bossbg, x0, 36); hctx.drawImage(pv.boss, 0, 0, Math.round(182 * 0.62 * PS), 5 * PS, x0, 36, Math.round(182 * 0.62 * g), 5 * g);
-    hctx.drawImage(pv.cross, 800 - 7.5 * g, 200 - 7.5 * g);
+    // the game inverts what is behind the crosshair (see crosshair.js); "exclusion" is the same blend
+    const CA = animFrames(st.cross, "cross"), cf = pv.crossF ? pv.crossF[Math.floor((reduceMotion ? 0 : tick / CA.dur) * pv.crossF.length / CA.n) % pv.crossF.length] : pv.cross;
+    hctx.globalCompositeOperation = st.pvCrossInvert !== false ? "exclusion" : "source-over";
+    hctx.drawImage(cf, 800 - 7.5 * g, 200 - 7.5 * g); hctx.globalCompositeOperation = "source-over";
     const xpY = 500, rowY = xpY - 10 * g, topY = rowY - 10 * g;
     for (let i = 0; i < 10; i++) hctx.drawImage(pv.armor[i < 6 ? 2 : i === 6 ? 1 : 0], x0 + i * 8 * g, topY);
     for (let i = 0; i < 10; i++) { const x = x0 + i * 8 * g; hctx.drawImage(pv.cont, x, rowY); if (i < 9) { const h = i < 8 ? 0 : 1; hctx.drawImage(pv.hearts[hf][h], x, rowY);

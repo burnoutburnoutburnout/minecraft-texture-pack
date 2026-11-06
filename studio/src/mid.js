@@ -196,16 +196,7 @@ function bubbleIcon(S, popping, col, cfg) {
   return toRGBA(img);
 }
 
-function crosshairIcon(S, cfg) {
-  const img = newImg(S, 16, 16), cov = covf(S), col = unhex(cfg.col), h = cfg.thick / 2, L = cfg.len;
-  for (let j = 0; j < img.H; j++) for (let i = 0; i < img.W; i++) {
-    const X = (i + 0.5) / S, Y = (j + 0.5) / S, p = j * img.W + i;
-    const a = cov(Math.min(sdBox(X, Y, 7.5, 7.5, h, L), sdBox(X, Y, 7.5, 7.5, L, h)));
-    if (a > 0) setPx(img, p, a, col);
-  }
-  return toRGBA(img);
-}
-
+/* the crosshair is drawn in crosshair.js */
 function pingIcon(S, level) {
   const img = newImg(S, 10, 8), cov = covf(S), active = level < 5 ? 5 - level : 0;
   for (let j = 0; j < img.H; j++) for (let i = 0; i < img.W; i++) {
