@@ -127,7 +127,8 @@ function elSections(key, kind, name, cls) {
     SEL(p("glowCol"), "Glow colour", [["main", "Highlight colour"], ["white", "White"], ["outline", "Outline colour"]]),
     R(p("sticker"), "Sticker border", 0, 0.8, 0.01), R(p("ring"), "Outer ring gap", 0, 0.8, 0.01), R(p("drop"), "Drop shadow", 0, 1, 0.01));
   borderCtl.push(TG(p("double"), "Inner highlight line"));
-  const texCtl = [...(kind === "heart" ? [SEL(p("hardcore"), "Hardcore mark", [["world", "In hardcore worlds (like vanilla)"], ["always", "On all hearts"], ["off", "Never"]]),
+  const texCtl = [...(kind === "heart" ? [SEL(p("hardcore"), "Hardcore mark", [["world", "In hardcore worlds (like vanilla)"], ["always", "On all hearts"], ["off", "Never"]]), SEL(p("hcStyle"), "Hardcore mark look", Object.entries(HC_STYLES)), R(p("hcSize"), "Hardcore mark size", 0.6, 1.6, 0.01),
+      R(p("hcStrength"), "Hardcore mark strength", 0.3, 1.5, 0.01), R(p("hcCurve"), "Hardcore mark curve", -1, 1.5, 0.01),
       TG("pvHardcore", "Preview as a hardcore world"), SEL(p("illus"), "Heart style", [["", "Built from the cards below"], ["gemheart", "Framed gem heart (picture match)"]]),
       SEL(p("gemFill"), "Gem fill (framed gem heart)", [["facets", "Cut ruby facets"], ["texture", "Selected texture"]]),
       R(p("facetStr"), "Facet shading on the texture", 0, 1, 0.01)] : []),

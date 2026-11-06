@@ -273,22 +273,44 @@ UI_STYLES.celestial = (kind, S, el, cols, t, mode, flash, seed) => {
 
 /* Hardcore mark (vanilla's hardcore hearts): a dark chevron across the heart with a lit edge above it.
    lx, ly are heart-local coordinates (base px from the heart's centre, before scaling). */
+const HC_STYLES = { engraved: "Engraved", glow: "Glowing", light: "Light slashes", dark: "Flat dark (old)" };
 function hardcoreMark(g, lx, ly, P, S, darkFill, fr) {
-  // Exactly two marks, as on vanilla hardcore hearts: a thick diagonal stroke on each side, running from the upper
-  // outer part of the heart down toward the middle, with a gap between them. Positions measured from a reference,
-  // as fractions of the heart's own extent (fr, heart-local units).
+  // Exactly two marks, as on vanilla hardcore hearts: a diagonal slash on each side, from the upper outer part of the
+  // heart down toward the middle, with a gap between them. Positions are fractions of the heart's own extent (fr).
+  const H = (typeof st !== "undefined" && st.heart) || {}, style = HC_STYLES[H.hcStyle] ? H.hcStyle : "engraved";
+  const k = H.hcSize ?? 1, str = H.hcStrength ?? 1, bow = H.hcCurve ?? 0.35;
   fr = fr || { cx: 0, cy: -0.2, w: 7.6, h: 7.6 };
-  const top = fr.cy - fr.h / 2, hw = 0.056 * fr.w;
-  let d = 9;
+  const top = fr.cy - fr.h / 2, hw = 0.04 * fr.w * k;
+  let d = 9, ox = 0, oy = 0, wq = 0;                                           // distance, offset from the centre line, width there
   for (const s of [-1, 1]) {
-    const ax = fr.cx + s * 0.3 * fr.w, ay = top + 0.36 * fr.h, bx = fr.cx + s * 0.125 * fr.w, by = top + 0.54 * fr.h;
-    const ex = bx - ax, ey = by - ay, q = sat(((lx - ax) * ex + (ly - ay) * ey) / (ex * ex + ey * ey));
-    const w = hw * (1 - 0.25 * q);                                           // a little thinner toward the middle
-    d = Math.min(d, Math.hypot(lx - ax - ex * q, ly - ay - ey * q) - w);
+    const ax = fr.cx + s * 0.31 * fr.w, ay = top + 0.35 * fr.h, bx = fr.cx + s * 0.12 * fr.w, by = top + 0.555 * fr.h;
+    const ex = bx - ax, ey = by - ay, L = Math.hypot(ex, ey), q = sat(((lx - ax) * ex + (ly - ay) * ey) / (L * L));
+    const sag = bow * 0.35 * Math.sin(Math.PI * q);                            // bowed slightly outward, like a claw mark
+    const nx = -ey / L * s, ny = ex / L * s, px = ax + ex * q + nx * sag, py = ay + ey * q + ny * sag;
+    const w = hw * Math.pow(Math.sin(Math.PI * q), 0.45) * (1.12 - 0.3 * q);  // a slender slash: tapers smoothly to a point at each end
+    const dd = Math.hypot(lx - px, ly - py) - w;
+    if (dd < d) { d = dd; ox = lx - px; oy = ly - py; wq = w; }
   }
-  const m = sat(0.5 - d / Math.max(0.1, 1.2 / S));
-  const markC = darkFill ? mixc(P.deep, P.cloud, 0.22) : scale3(P.deep, 0.6);
-  return mixc(g, markC, m * 0.92);
+  const aa = Math.max(0.1, 1.1 / S), m = sat(0.5 - d / aa);
+  const side = -oy / Math.max(0.05, wq);                                       // +1 on the upper wall of the groove, -1 on the lower wall (light from above)
+  if (style === "dark") return mixc(g, darkFill ? mixc(P.deep, P.cloud, 0.22) : scale3(P.deep, 0.6), m * 0.92 * Math.min(1, str));
+  if (style === "glow") {
+    const glow = Math.exp(-Math.max(0, d) / 0.55) * 0.55 * str, core = mixc(P.bright, WHITE, 0.55);
+    let c = mixc(g, mixc(P.cloud, P.bright, 0.6), sat(glow));
+    return mixc(c, mixc(core, WHITE, sat(-d / Math.max(0.05, wq)) * 0.6), sat(m * str));
+  }
+  if (style === "light") {
+    const c = mixc(g, scale3(g, 0.6), sat(0.5 - (d - 0.22) / aa) * (1 - m) * 0.5 * str);     // thin shadow so it stands out
+    return mixc(c, mixc(P.bright, WHITE, 0.7 + 0.3 * sat(side)), sat(m * 0.95 * str));
+  }
+  // engraved: a dark groove with a lit lower-right wall, a darker upper-left wall and a soft shadow round it
+  const shadow = sat(0.5 - (d - 0.28) / aa) * (1 - m);
+  let c = mixc(g, scale3(g, 0.55), shadow * 0.55 * str);
+  const groove = mixc(P.deep, P.cloud, 0.3);
+  const rim = sstep(-wq * 0.95, -wq * 0.15, d);                                // near the groove's edge
+  let mc = mixc(groove, scale3(P.deep, 0.35), sat(side) * rim);                // shadowed upper wall
+  mc = mixc(mc, mixc(P.bright, WHITE, 0.5), sat(-side) * rim);                  // lit lower wall
+  return mixc(c, mc, sat(m * Math.min(1, 0.92 * str)));
 }
 
 /* ---------- extra XP-bar-only styles ---------- */
