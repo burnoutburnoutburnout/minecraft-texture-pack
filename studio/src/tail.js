@@ -141,7 +141,7 @@ function elSections(key, kind, name, cls) {
         { label: "Shape", controls: [R("xp.rift.width", "Thickness", 0.2, 2.2, 0.01), R("xp.rift.widthVar", "Thickness variation", 0, 1, 0.01),
           R("xp.rift.jag", "Jagged edges", 0, 0.6, 0.01), R("xp.rift.jagFreq", "Jag detail", 0.5, 5, 0.05), R("xp.rift.sharp", "Sharp, crackly edges", 0, 1, 0.01),
           R("xp.rift.wave", "Wave", 0, 1.4, 0.01), R("xp.rift.zigzag", "Zig-zag (lightning)", 0, 1.6, 0.01), R("xp.rift.twin", "Twin rifts gap (0 = one rift)", 0, 1.8, 0.01), R("xp.rift.breaks", "Breaks", 0, 14, 1)] },
-        { label: "Light", controls: [R("xp.rift.glow", "Glow", 0, 1.6, 0.01), R("xp.rift.glowW", "Glow width", 0.05, 0.8, 0.01), R("xp.rift.core", "Hot edge", 0, 2, 0.01),
+        { label: "Light", controls: [R("xp.rift.glow", "Glow", 0, 1.6, 0.01), R("xp.rift.glowW", "Glow width", 0.05, 0.8, 0.01), R("xp.rift.fadeEnds", "Light fades at the ends", 0, 91, 0.5), R("xp.rift.core", "Hot edge", 0, 2, 0.01),
           R("xp.rift.inner", "Inside brightness", 0.2, 1.6, 0.01), R("xp.rift.pulse", "Flicker", 0, 1, 0.01), R("xp.rift.sparks", "Sparks", 0, 30, 1), R("xp.rift.shift", "Colour shift along the bar", 0, 1, 0.01)] },
         { label: "Colours", controls: [TG("xp.rift.custom", "Use my own glow colours (otherwise the galaxy colours)"), C("xp.rift.glowCol", "Glow"), C("xp.rift.hotCol", "Hot edge"), C("xp.rift.shiftCol", "Shift colour")] },
       ] }] : []),

@@ -145,7 +145,7 @@ UI_STYLES.mosaic = (kind, S, el, cols, t, mode, flash, seed) => {
 /* 4. Cosmic rift: a jagged, glowing tear in space with the galaxy behind it */
 /* Adjustable rift for the XP bar. Every variant is a set of these settings; the sliders change them. */
 const RIFT_BASE = { variant: "classic", width: 1.05, widthVar: 0.48, jag: 0.18, jagFreq: 1.4, sharp: 0, glow: 0.85, glowW: 0.25,
-  core: 1, inner: 1.15, wave: 0, zigzag: 0, twin: 0, breaks: 0, sparks: 0, pulse: 0, shift: 0,
+  core: 1, inner: 1.15, wave: 0, zigzag: 0, twin: 0, breaks: 0, sparks: 0, pulse: 0, shift: 0, fadeEnds: 36,
   custom: false, glowCol: "#5aa8ff", hotCol: "#dff4ff", shiftCol: "#b46cff" };
 const RIFT_VARIANTS = {
   classic: { label: "Cosmic rift" },
@@ -182,15 +182,16 @@ function riftBar(S, el, cols, t, mode, flash, seed) {
     const ends = sstep(0, 1.5, Math.min(X, 182 - X)); d = d + (1 - ends) * 1.5;
     const hm = R.shift > 0 ? (0.5 + 0.5 * Math.sin(X * 0.05 + TAU * t)) * R.shift : 0;
     const glowC = mixc(glowC0, sh, hm), hot = mixc(hot0, mixc(sh, WHITE, 0.5), hm * 0.6);
+    const lf = R.fadeEnds > 0 ? sstep(0, R.fadeEnds, Math.min(X, 182 - X)) ** 1.3 : 1;   // the coloured light fades out toward both ends
     let c = glowC, a = 0;
     if (d < 0) {
-      if (live) { c = mixc(scale3(gal(buf, k), R.inner), hot, sat(Math.exp(d / 0.13) * R.core * pulse)); a = cov(d); }
-      else { c = mixc(rgb(12, 8, 22), scale3(glowC, 0.5), Math.exp(d / 0.12) * 0.5); a = cov(d) * 0.9; }
+      if (live) { c = mixc(scale3(gal(buf, k), R.inner), hot, sat(Math.exp(d / 0.13) * R.core * pulse) * lf); a = cov(d); }
+      else { c = mixc(rgb(12, 8, 22), scale3(glowC, 0.5), Math.exp(d / 0.12) * 0.5 * lf); a = cov(d) * 0.9; }
     }
-    if (d > 0) { const ga = (live ? R.glow * pulse : 0.25) * Math.exp(-d / Math.max(0.05, R.glowW)); if (ga > a) { c = mixc(glowC, hot, Math.exp(-d / 0.08)); a = Math.max(a, sat(ga)); } }
+    if (d > 0) { const ga = (live ? R.glow * pulse : 0.25) * Math.exp(-d / Math.max(0.05, R.glowW)) * lf; if (ga > a) { c = mixc(glowC, hot, Math.exp(-d / 0.08)); a = Math.max(a, sat(ga)); } }
     if (live) for (const [sx, ph, f] of sparks) {                  // embers drifting up from the rift
       const sy = 2.5 - hw * 0.4 - ph * 2.2, dd = Math.hypot((X - sx) * 0.8, Y - sy);
-      if (dd < 0.6) { const v = Math.exp(-((dd / 0.18) ** 2)) * f; c = mixc(c, hot, sat(v * 1.5)); a = Math.max(a, sat(v)); }
+      if (dd < 0.6) { const v = Math.exp(-((dd / 0.18) ** 2)) * f * lf; c = mixc(c, hot, sat(v * 1.5)); a = Math.max(a, sat(v)); }
     }
     if (flash) c = mixc(c, WHITE, 0.4);
     if (a > 0.003) setPx(img, k, a, c);
