@@ -2537,8 +2537,11 @@ const HB_DEFAULTS = { enabled: true, style: "galaxy", selStyle: "auto", buttons:
   c1: "#160c46", c2: "#4a2ab8", c3: "#9c6cff", accent: "#b48cff", selCol: "#efe4ff", slotCol: "#0a0814", outlineCol: "#05030c", goldCol: "#e0b04a",
   slotA: 0.7, railA: 1, window: 0.6, round: 0.15, frameW: 0.5, glow: 0.8, shine: 0.6, stars: 1, texScale: 1,
   pulse: 0.5, selW: 2.4, selGlow: 0.9, orbit: 1, speed: 2, loopSec: 6, animFps: "ticks", motion: "random", shoot: 1,
-  slotShape: "square", barShape: "box", rot: 0, alt: false, spin: 0, rotMode: "same", sizeMode: "even", skew: 0, selScale: 1, gal: clone(HB_GAL_BASE), rb: clone(HB_RB_BASE) };
+  slotShape: "square", barShape: "box", rot: 0, alt: false, spin: 0, rotMode: "same", sizeMode: "even", skew: 0, selScale: 1, selFill: "auto", gal: clone(HB_GAL_BASE), rb: clone(HB_RB_BASE) };
 const hbStill = hb => ["stone"].includes(hb.style) && hbSelStyle(hb) === "stone" && !(+hb.spin);
+// what fills the selected-slot frame: "auto" follows the hotbar (galaxy styles -> galaxy, rainbow -> rainbow)
+const hbSelFill = hb => { const f = hb.selFill || "auto"; if (f !== "auto") return f;
+  return ["galaxy", "nebula"].includes(hb.style) ? "galaxy" : hb.style === "rainbow" ? "rainbow" : "color"; };
 const hbSelStyle = hb => hb.selStyle === "auto" ? HB_AUTO_SEL[hb.style] || "glow" : hb.selStyle;
 function hsv(h, sv, v) {
   h = fract(h) * 6; const i = Math.floor(h), f = h - i, p = v * (1 - sv), q = v * (1 - sv * f), u = v * (1 - sv * (1 - f));
@@ -2769,41 +2772,47 @@ function hotbarIcon(S, hb, t) {
 /* the 24 x 24 selection frame; the middle (where the item is) stays clear */
 function hotbarSelIcon(S, hb, t) {
   const img = newImg(S, 24, 24), W = img.W, H = img.H, cov = covf(S), P = hbPalette(hb), style = hbSelStyle(hb);
-  const buf = style === "frame" ? hbGalaxy(S, 24, 24, t, hb, P, 23) : null, R = Object.assign(clone(HB_RB_BASE), hb.rb || {});
-  const col = hb.style === "celestial" && hb.selStyle === "auto" ? unhex(hb.goldCol) : unhex(hb.selCol), acc = unhex(hb.accent);
+  const gold = hb.style === "celestial" && hb.selStyle === "auto", F = hbSelFill(hb);
+  const buf = style === "frame" || F === "galaxy" ? hbGalaxy(S, 24, 24, t, hb, P, 23) : null, R = Object.assign(clone(HB_RB_BASE), hb.rb || {});
+  const col = gold ? unhex(hb.goldCol) : unhex(hb.selCol), acc = unhex(hb.accent), cyc = Math.max(1, Math.round(R.cycles));
+  // the frame's colour at a point: plain colour, the moving galaxy, or a rainbow running round the frame
+  const C = (X, Y, k) => F === "galaxy" ? scale3(mixc(gal(buf, k), P.bright, 0.25), 1.3)
+    : F === "rainbow" ? hsv(Math.atan2(Y - 12, X - 12) / TAU - t * cyc, Math.max(0.5, R.sat), 1) : col;
   // the frame follows the slots' turn where every slot shares it (same, alternate, rock, spin); otherwise it only takes the spin
   const G = hbSlotGeo(hb, t), shape = G.shape, SH = G.SH, spin = Math.round(+hb.spin || 0), kS = G.k;
   const a = ["same", "alternate", "rock"].includes(G.mode) ? G.angs[0] : G.spinA, ca = Math.cos(a), sa = Math.sin(a);
   const e1 = spin || G.mode === "rock" ? [shapeR(shape, kS), shapeR(shape, kS)] : shapeExt(shape, 1, a, kS), ef = Math.max(e1[0], e1[1]);
   const ho = 11.8 / ef * Math.min(1, Math.max(0.5, +hb.selScale || 1)), hh = Math.max(ho * 0.55, ho - hb.selW / ef), hm = (ho + hh) / 2, roundK = hb.round;
   const pulse = 1 + hb.pulse * 0.4 * Math.sin(TAU * 2 * t), squareish = shape === "square";
+  const cornerPts = shape === "circle" ? [[0.76, 0.76], [-0.76, 0.76], [-0.76, -0.76], [0.76, -0.76]] : shape === "star" ? SH.pts.filter((_, n) => n % 2 === 0) : SH.pts;
   for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
     const k = j * W + i, X = (i + 0.5) / S, Y = (j + 0.5) / S, p = px0();
     const dx = X - 12 - kS * (Y - 12), lx = ca * dx + sa * (Y - 12), ly = -sa * dx + ca * (Y - 12);
     const dO = SH.sd(lx, ly, ho, roundK), dH = SH.sd(lx, ly, hh, roundK);
-    const ring = cov(dO) * (1 - cov(dH));
+    const ring = cov(dO) * (1 - cov(dH)), cc = C(X, Y, k);
     if (style === "frame") {
-      const gold = hb.style === "celestial" && hb.selStyle === "auto";
-      const base = gold ? scale3(col, 0.6 + 0.5 * sat(0.6 - (Y - 12) / 20)) : scale3(gal(buf, k), 1.25);
+      const base = gold && F === "color" ? scale3(col, 0.6 + 0.5 * sat(0.6 - (Y - 12) / 20)) : F === "rainbow" ? scale3(cc, 0.85) : scale3(gal(buf, k), 1.25);
+      const lineC = F === "color" && !gold ? col : cc;
       over(p, ring, base);
-      over(p, ring * Math.exp(-Math.abs(dH) / 0.2) * hb.selGlow * pulse, mixc(col, WHITE, 0.4));
-      over(p, ring * Math.exp(dO / 0.3) * 0.9, scale3(col, gold ? 0.25 : 1));
+      over(p, ring * Math.exp(-Math.abs(dH) / 0.2) * hb.selGlow * pulse, mixc(lineC, WHITE, 0.4));
+      over(p, ring * Math.exp(dO / 0.3) * 0.9, scale3(lineC, gold && F === "color" ? 0.25 : 1));
       over(p, (1 - cov(dO + 0.45)) * cov(dO), unhex(hb.outlineCol));
     } else if (style === "glow") {
       const g = dH > 0 ? Math.exp(-dH / 1.1) * sat(-dO / 0.8) : Math.exp(dH / 0.35) * 0.4;
-      over(p, hb.selGlow * pulse * g * 0.85, col);
-      over(p, Math.exp(-((dH / 0.22) ** 2)), mixc(col, WHITE, 0.6));
-      over(p, (1 - cov(dO + 0.4)) * 0.6 * cov(dO), scale3(col, 0.5));
+      over(p, hb.selGlow * pulse * g * 0.85, cc);
+      over(p, Math.exp(-((dH / 0.22) ** 2)), mixc(cc, WHITE, F === "color" ? 0.6 : 0.35));
+      over(p, (1 - cov(dO + 0.4)) * 0.6 * cov(dO), scale3(cc, 0.5));
     } else if (style === "corners") {
-      // corners follow the spin only on four-fold shapes; others keep them still so the loop matches up
-      const ac = SH.sym === 4 ? a : (+hb.rot || 0) * Math.PI / 180, sx2 = X - 12 - kS * (Y - 12), cx2 = Math.cos(ac) * sx2 + Math.sin(ac) * (Y - 12), cy2 = -Math.sin(ac) * sx2 + Math.cos(ac) * (Y - 12);
-      const L = (5 + 1.2 * hb.pulse * Math.sin(TAU * 2 * t)) / ef, m2 = Math.min(Math.abs(cx2), Math.abs(cy2)), near = m2 > ho - L ? 1 : 0;
-      over(p, ring * near * cov(-(m2 - (ho - L))), mixc(col, WHITE, 0.2));
-      over(p, ring * near * Math.exp(-Math.abs(dH) / 0.25) * hb.selGlow, WHITE);
+      // brackets on the shape's own points (corners, tips); they turn with the shape
+      const L = (4.6 + 1.2 * hb.pulse * Math.sin(TAU * 2 * t)) * ho / 11.8;
+      let dc = 9; for (const [vx, vy] of cornerPts) dc = Math.min(dc, Math.hypot(lx - vx * ho, ly - vy * ho));
+      const near = cov(dc - L);
+      over(p, ring * near, mixc(cc, WHITE, F === "color" ? 0.2 : 0.05));
+      over(p, ring * near * Math.exp(-Math.abs(dH) / 0.25) * hb.selGlow, F === "color" ? WHITE : mixc(cc, WHITE, 0.6));
     } else if (style === "orbit") {
       const dl = Math.abs(SH.sd(lx, ly, hm, roundK)), mid = squareish ? hm : hm * ef;
-      over(p, 0.75 * Math.exp(-((dl / 0.22) ** 2)), mixc(col, acc, 0.3));
-      over(p, hb.selGlow * 0.3 * Math.exp(-dl / 0.7), col);
+      over(p, 0.75 * Math.exp(-((dl / 0.22) ** 2)), F === "color" ? mixc(col, acc, 0.3) : cc);
+      over(p, hb.selGlow * 0.3 * Math.exp(-dl / 0.7), cc);
       const n = Math.max(1, Math.round(hb.orbit));
       for (let q = 0; q < n; q++) {                                                // star(s) running around the square, with a tail
         for (let tr = 0; tr < 6; tr++) {
@@ -2811,7 +2820,7 @@ function hotbarSelIcon(S, hb, t) {
           let pl = sideI === 0 ? [-m + 2 * m * f, -m] : sideI === 1 ? [m, -m + 2 * m * f] : sideI === 2 ? [m - 2 * m * f, m] : [-m, m - 2 * m * f];
           if (!squareish) { const th = TAU * (u / 4); pl = [Math.cos(th) * m * 0.93, Math.sin(th) * m * 0.93]; }
           const dd = Math.hypot(lx - pl[0], ly - pl[1]), w = tr === 0 ? 0.55 : 0.4 - tr * 0.04;
-          over(p, (tr === 0 ? 1 : 0.5 * (1 - tr / 6)) * Math.exp(-((dd / w) ** 2)) * pulse, tr === 0 ? WHITE : mixc(col, WHITE, 0.4));
+          over(p, (tr === 0 ? 1 : 0.5 * (1 - tr / 6)) * Math.exp(-((dd / w) ** 2)) * pulse, tr === 0 ? WHITE : mixc(cc, WHITE, 0.4));
         }
       }
     } else if (style === "rainbow") {
@@ -2822,7 +2831,7 @@ function hotbarSelIcon(S, hb, t) {
       over(p, Math.exp(-((dH / 0.22) ** 2)), mixc(rc, WHITE, 0.6));
       over(p, (1 - cov(dO + 0.4)) * cov(dO) * 0.7, scale3(rc, 0.4));
     } else {
-      const lit = Y < 12 ? 1.15 : 0.85, plainC = hb.style === "stone" ? rgb(210, 210, 210) : col;
+      const lit = Y < 12 ? 1.15 : 0.85, plainC = hb.style === "stone" && F === "color" ? rgb(210, 210, 210) : cc;
       over(p, ring, scale3(plainC, lit));
       over(p, (1 - cov(dO + 0.5)) * cov(dO), rgb(20, 20, 20));
       over(p, ring * Math.exp(-((dH / 0.25) ** 2)) * 0.6, rgb(90, 90, 90));
@@ -3372,7 +3381,7 @@ const SECTIONS = [
       R("hotbar.spin", "Spin (turns per loop, minus = other way)", -3, 3, 1)] },
     { label: "Lean & size", controls: [R("hotbar.skew", "Slant", -0.6, 0.6, 0.01), SEL("hotbar.sizeMode", "Size pattern", Object.entries(HB_SIZE_MODES))] }] },
   { id: "hb-sel", tab: "hotbar", title: "Selected slot frame", cls: "", chips: "styles-hbsel", groups: [
-    { controls: [C("hotbar.selCol", "Frame colour")] },
+    { controls: [SEL("hotbar.selFill", "Frame fill", [["auto", "Match the hotbar (galaxy or rainbow)"], ["galaxy", "Galaxy"], ["rainbow", "Rainbow"], ["color", "Frame colour"]]), C("hotbar.selCol", "Frame colour")] },
     { controls: [R("hotbar.selW", "Frame thickness", 1, 3.7, 0.05), R("hotbar.selGlow", "Glow", 0, 1.5, 0.01), R("hotbar.pulse", "Pulse", 0, 1, 0.01), R("hotbar.orbit", "Orbiting stars", 1, 4, 1)] }] },
   { id: "hb-look", tab: "hotbar", title: "Hotbar look", cls: "", groups: [
     { controls: [R("hotbar.slotA", "Slot opacity", 0, 1, 0.01), R("hotbar.railA", "Frame opacity", 0, 1, 0.01),

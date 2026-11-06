@@ -261,7 +261,7 @@ const SECTIONS = [
       R("hotbar.spin", "Spin (turns per loop, minus = other way)", -3, 3, 1)] },
     { label: "Lean & size", controls: [R("hotbar.skew", "Slant", -0.6, 0.6, 0.01), SEL("hotbar.sizeMode", "Size pattern", Object.entries(HB_SIZE_MODES))] }] },
   { id: "hb-sel", tab: "hotbar", title: "Selected slot frame", cls: "", chips: "styles-hbsel", groups: [
-    { controls: [C("hotbar.selCol", "Frame colour")] },
+    { controls: [SEL("hotbar.selFill", "Frame fill", [["auto", "Match the hotbar (galaxy or rainbow)"], ["galaxy", "Galaxy"], ["rainbow", "Rainbow"], ["color", "Frame colour"]]), C("hotbar.selCol", "Frame colour")] },
     { controls: [R("hotbar.selW", "Frame thickness", 1, 3.7, 0.05), R("hotbar.selGlow", "Glow", 0, 1.5, 0.01), R("hotbar.pulse", "Pulse", 0, 1, 0.01), R("hotbar.orbit", "Orbiting stars", 1, 4, 1)] }] },
   { id: "hb-look", tab: "hotbar", title: "Hotbar look", cls: "", groups: [
     { controls: [R("hotbar.slotA", "Slot opacity", 0, 1, 0.01), R("hotbar.railA", "Frame opacity", 0, 1, 0.01),
