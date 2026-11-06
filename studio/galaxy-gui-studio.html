@@ -4420,19 +4420,29 @@ setTimeout(() => { buildPreview(); drawThumbs(); }, 0);
   const box = document.createElement("div"); box.className = "saves";
   box.innerHTML = '<p class="group-label">Turn the colour inversion off in game</p>'
     + '<p class="hint">A resource pack can\'t change how the game blends the crosshair, so this is a small Forge 1.8.9 mod that does: it draws the crosshair from your pack with its real colours. '
-    + 'Put the .jar in <code>.minecraft/mods/</code> (needs Forge for 1.8.9). Untick the preview option above to see what it will look like. '
+    + 'It downloads as a .zip: open it and put the .jar inside into <code>.minecraft/mods/</code> (needs Forge for 1.8.9). Untick the preview option above to see what it will look like. '
     + 'Clients that don\'t load Forge mods have their own crosshair settings instead.</p>';
   const row = document.createElement("div"); row.className = "export-row";
-  const btn = document.createElement("button"); btn.type = "button"; btn.className = "btn"; btn.textContent = "Download the crosshair mod (.jar)";
+  const btn = document.createElement("button"); btn.type = "button"; btn.className = "btn"; btn.textContent = "Download the crosshair mod (.zip)";
   const msg = document.createElement("p"); msg.className = "status"; msg.setAttribute("role", "status");
   row.appendChild(btn); box.append(row, msg); card.appendChild(box);
   btn.addEventListener("click", async () => {
     if (!downloads) { msg.textContent = "Saving files isn't available in this view. Open the artifact on claude.ai to download it."; msg.className = "status err"; return; }
     try {
+      // .jar files can't be saved from here, so the jar goes inside a zip with a short note
       const bin = atob(CROSS_MOD_JAR), bytes = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      const zip = new JSZip(), zname = CROSS_MOD_NAME.replace(/\.jar$/, ".zip");
+      zip.file(CROSS_MOD_NAME, bytes);
+      zip.file("HOW TO INSTALL.txt", "Galaxy GUI Crosshair - Forge mod for Minecraft 1.8.9\r\n\r\n"
+        + "1. Install Forge for Minecraft 1.8.9 (and OptiFine as a Forge mod if you use it).\r\n"
+        + "2. Take " + CROSS_MOD_NAME + " out of this zip and put it in your .minecraft/mods/ folder.\r\n"
+        + "   Put the .jar itself there, not this zip and not an unzipped folder.\r\n"
+        + "3. Launch the Forge profile. The crosshair now shows its real colours instead of inverting what is behind it.\r\n\r\n"
+        + "Settings: config/galaxyguicrosshair.cfg (made on first launch). enabled=false turns the mod off.\r\n");
+      const blob = await zip.generateAsync({ type: "blob", compression: "DEFLATE" });
       msg.textContent = "Confirm the download…"; msg.className = "status";
-      await downloads.save({ filename: CROSS_MOD_NAME, data: new Blob([bytes], { type: "application/java-archive" }) });
-      msg.textContent = "Saved " + CROSS_MOD_NAME + "."; msg.className = "status ok";
+      await downloads.save({ filename: zname, data: blob });
+      msg.textContent = "Saved " + zname + ". Open it and move the .jar inside into .minecraft/mods/."; msg.className = "status ok";
     } catch (e) { msg.textContent = e && e.code === "declined" ? "Download cancelled." : "Couldn't save the file: " + (e && e.message || e); msg.className = "status err"; }
   });
 })();
