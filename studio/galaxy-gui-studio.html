@@ -56,6 +56,7 @@ h1 span { color: var(--accent); }
 .dot.meat { background: var(--meat); }
 .dot.xp { background: var(--xp); }
 .hint { color: var(--muted); font-size: 13px; margin: 0; }
+.fps-info { grid-column: 1 / -1; }
 .group-label { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 2px 0 -6px; font-weight: 700; }
 
 .hud-frame { border-radius: 12px; overflow: hidden; border: 1px solid var(--line); background: #4f6b35; }
@@ -2439,12 +2440,12 @@ const DEFAULTS = {
   hungerTint: "#64962e",
   empty: { style: "default", fill: "#1f2120", outline: "#060403", outlineW: 0.55, shade: 0.35, fillA: 1, alpha: 1,
     ghostBright: 0.35, ghostSat: 0.15, ghostTint: 0.25, size: 1, hungerFill: "#26321a" },
-  heart: clone(EL_DEFAULTS.heart),
+  heart: Object.assign(clone(EL_DEFAULTS.heart), { loopSec: 5.6 }),
   poison: { c1: "#0e3c18", c2: "#329638", c3: "#96f06e" },
   wither: { c1: "#121218", c2: "#403e4c", c3: "#828092" },
   gold: { c1: "#5a2e06", c2: "#d28818", c3: "#ffe26e" },
   armor: clone(EL_DEFAULTS.armor),
-  xp: clone(EL_DEFAULTS.bar),
+  xp: Object.assign(clone(EL_DEFAULTS.bar), { loopSec: 4.8 }),
   boss: { c1: "#3c0a46", c2: "#b428a0", c3: "#ff6edc" },
   jump: { c1: "#5a2e06", c2: "#d28818", c3: "#ffe26e" },
   bubble: { col: "#78c8ff", style: "classic", accent: "#ffd27a", size: 1, rim: 1, shine: 1, alpha: 1 },
@@ -2510,6 +2511,23 @@ const D = (path, label, min, max, step) => ({ type: "deg", path, label, min, max
 const TG = (path, label) => ({ type: "toggle", path, label });
 const AN = (path, label) => ({ type: "angle", path, label, min: 0, max: 360, step: 1 });
 const SEL = (path, label, options) => ({ type: "select", path, label, options });
+// OptiFine times animation frames in game ticks (20 a second), so frame rates are 20 divided by a whole number
+const FPS_OPTIONS = [["1", "20 fps (highest the game allows)"], ["2", "10 fps"], ["3", "6.7 fps"], ["4", "5 fps"], ["5", "4 fps"], ["10", "2 fps"]];
+const NUM_SELECT = /(\.speed)$/;
+// frames in a loop: frame rate x loop length, capped so the texture stays a sane size (512x XP bars are large)
+function animFrames(el, kind, res = st.res) {
+  const cap = kind === "bar" ? (res >= 512 ? 64 : 160) : 240, loop = Math.max(1, +el.loopSec || 5);
+  let dur = Math.max(1, Math.round(+el.speed || 2)), n = Math.round(loop * 20 / dur);
+  if (n > cap) { dur = Math.ceil(loop * 20 / cap); n = Math.round(loop * 20 / dur); }
+  return { n: Math.max(2, n), dur, fps: 20 / dur, capped: dur !== Math.max(1, Math.round(+el.speed || 2)) };
+}
+function fpsInfoText(el, kind) {
+  const a = animFrames(el, kind), f = +a.fps.toFixed(1);
+  let s = `In game: ${f} fps, ${a.n} frames, loops every ${(a.n * a.dur / 20).toFixed(1)} s.`;
+  if (a.capped) s += ` Lowered from ${+(20 / (+el.speed || 2)).toFixed(1)} fps to keep the ${st.res}x texture a manageable size; shorten the loop for a higher frame rate.`;
+  if (el.animFps === "smooth") s += " Smoothing blends between frames, so motion looks fluid at your monitor's refresh rate.";
+  return s;
+}
 const INT_PATHS = /(burnCount|facets|segments|wave\.1|dash|stitch|shoot|breaks|sparks)$/;
 
 function elSections(key, kind, name, cls) {
@@ -2544,8 +2562,10 @@ function elSections(key, kind, name, cls) {
       SEL(p("gemFill"), "Gem fill (framed gem heart)", [["facets", "Cut ruby facets"], ["texture", "Selected texture"]]),
       R(p("facetStr"), "Facet shading on the texture", 0, 1, 0.01)] : []),
     R(p("stars"), "Stars", 0, 3, 0.05), R(p("texScale"), "Texture size", 0.3, 3, 0.01), R(p("texStrength"), "Texture strength", 0, 1, 0.01), R(p("glow"), "Edge glow", 0, 1, 0.01)];
-  if (kind !== "armor") texCtl.push(SP(p("speed"), kind === "bar" ? "Flow speed" : "Animation speed"),
-    SEL(p("animFps"), "Animation frame rate", [["smooth", "Smooth: your monitor's refresh rate (e.g. 240 fps)"], ["ticks", "Stepped: up to 20 fps (game ticks)"]]),
+  if (kind !== "armor") texCtl.push(SEL(p("speed"), "Frame rate (FPS)", FPS_OPTIONS),
+    R(p("loopSec"), kind === "bar" ? "Loop length in seconds (longer = slower flow)" : "Loop length in seconds (longer = slower motion)", 1, 12, 0.1),
+    SEL(p("animFps"), "Smoothing", [["ticks", "Off (lightest)"], ["smooth", "Blend frames (smooth, costs FPS)"]]),
+    { type: "info", path: p("fpsInfo"), kind }, 
     SEL(p("motion"), "Motion", [["random", "Random: wanders, changes speed, shooting stars"], ["loop", "Steady: drifts one way at one speed"]]),
     R(p("shoot"), "Shooting stars per loop (random)", 0, 5, 1));
   const lightCtl = [AN(p("light"), "Light direction"), R(p("shade"), "Inner shadow", 0, 2.5, 0.01), R(p("falloff"), "Light falloff", 0, 2, 0.01),
@@ -2849,7 +2869,10 @@ for (const sec of SECTIONS) {
         const sel = document.createElement("select"); sel.id = id;
         for (const [v, l] of ctl.options) { const o = document.createElement("option"); o.value = v; o.textContent = l; sel.appendChild(o); }
         f.append(lab, sel); slidersBox.appendChild(f);
-        sel.addEventListener("change", () => { setP(ctl.path, sel.value); changed(); });
+        sel.addEventListener("change", () => { setP(ctl.path, NUM_SELECT.test(ctl.path) ? +sel.value : sel.value); changed(); });
+      } else if (ctl.type === "info") {
+        const pEl = document.createElement("p"); pEl.className = "hint fps-info"; pEl.id = id; pEl.dataset.kind = ctl.kind; pEl.dataset.el = ctl.path.split(".")[0];
+        slidersBox.appendChild(pEl);
       } else if (ctl.type === "toggle") {
         const f = document.createElement("label"); f.className = "toggle"; f.htmlFor = id;
         const inp = document.createElement("input"); inp.type = "checkbox"; inp.id = id; f.append(inp, ctl.label); slidersBox.appendChild(f);
@@ -3051,7 +3074,8 @@ function syncInputs() {
     const v = getP(ctl.path), inp = $(idOf(ctl.path));
     if (ctl.type === "color") inp.value = v;
     else if (ctl.type === "toggle") inp.checked = !!v;
-    else if (ctl.type === "select") inp.value = v;
+    else if (ctl.type === "select") inp.value = String(v);
+    else if (ctl.type === "info") { const el = st[inp.dataset.el]; inp.textContent = fpsInfoText(el, inp.dataset.kind); }
     else { inp.value = ctl.type === "speed" ? 5 - v : v; $(idOf(ctl.path) + "-o").textContent = fmt(ctl, v); }
   }
   for (const [set, cfg] of Object.entries(chipSets)) for (const b of $("chips-" + set).children) b.setAttribute("aria-pressed", String(b.dataset.name === cfg.sel()));
@@ -3078,7 +3102,7 @@ function showTab() {
    Preview
    ===================================================================== */
 const PS = 8;              // preview pixels per base px (GUI scale 4 on a 2x canvas)
-const HEART_FRAMES = 56, XP_FRAMES = 48;
+let HEART_FRAMES = 56, XP_FRAMES = 48;
 function toCanvas(rgba) { const c = document.createElement("canvas"); c.width = rgba.w; c.height = rgba.h; c.getContext("2d").putImageData(new ImageData(rgba.data, rgba.w, rgba.h), 0, 0); return c; }
 let pv = null;
 function drawInto(id, rgba) { const cv = $(id), g = cv.getContext("2d"); g.clearRect(0, 0, cv.width, cv.height); g.drawImage(toCanvas(rgba), 0, 0); }
@@ -3088,6 +3112,7 @@ function buildPreview() {
 }
 function buildPreviewInner() {
   const hearts = [], xp = [];
+  HEART_FRAMES = animFrames(st.heart, "heart").n; XP_FRAMES = animFrames(st.xp, "bar").n;
   for (let f = 0; f < HEART_FRAMES; f++) hearts.push([toCanvas(HRT(PS, f / HEART_FRAMES, "full")), toCanvas(HRT(PS, f / HEART_FRAMES, "half"))]);
   for (let f = 0; f < XP_FRAMES; f++) xp.push(toCanvas(BAR(PS, f / XP_FRAMES, "fill")));
   pv = { hearts, xp, cont: toCanvas(HRT(PS, 0, "container")), xpbg: toCanvas(BAR(PS, 0, "bg")),
@@ -3119,7 +3144,7 @@ let fpsN = 0, fpsT = performance.now();
 function drawHud(now) {
   if (pv) {
     const g = 8, tick = (now - t0) / 50;                                   // 20 game ticks per second
-    const hp = reduceMotion ? 0 : tick / st.heart.speed, xp = reduceMotion ? 0 : tick / st.xp.speed;
+    const hp = reduceMotion ? 0 : tick / animFrames(st.heart, "heart").dur, xp = reduceMotion ? 0 : tick / animFrames(st.xp, "bar").dur;
     const hf = Math.floor(hp) % HEART_FRAMES, xf = Math.floor(xp) % XP_FRAMES;
     // OptiFine "interpolate": the next frame fades in between ticks, so motion updates on every screen refresh
     const ha = st.heart.animFps === "smooth" ? hp % 1 : 0, xa = st.xp.animFps === "smooth" ? xp % 1 : 0;
@@ -3140,7 +3165,8 @@ function drawHud(now) {
     // measured preview frame rate
     fpsN++; if (now - fpsT > 1000) { const fps = Math.round(fpsN * 1000 / (now - fpsT)); fpsN = 0; fpsT = now;
       const smooth = st.heart.animFps === "smooth" || st.xp.animFps === "smooth";
-      $("fps").textContent = smooth ? `Preview animating at ${fps} fps (your screen's refresh rate).` : `Preview animating at 20 fps or less (stepped).`; }
+      const hf2 = +animFrames(st.heart, "heart").fps.toFixed(1), xf2 = +animFrames(st.xp, "bar").fps.toFixed(1);
+      $("fps").textContent = smooth ? `Preview blending frames at ${fps} fps (your screen's refresh rate).` : `Preview stepping like the game: hearts ${hf2} fps, XP bar ${xf2} fps.`; }
   }
   requestAnimationFrame(drawHud);
 }
@@ -3149,6 +3175,7 @@ requestAnimationFrame(drawHud);
 let timer = null;
 function changed() {
   if ($("perf-est")) syncPerf();
+  for (const pEl of document.querySelectorAll(".fps-info")) pEl.textContent = fpsInfoText(st[pEl.dataset.el], pEl.dataset.kind);
   save(); clearTimeout(timer);
   if (EDIT[st.tab]) syncEditor(st.tab);
   timer = setTimeout(() => { buildPreview(); drawThumbs(); }, 150);
@@ -3171,10 +3198,10 @@ function fallbackCopy(text) {
 // OptiFine copies each animated region into icons.png on every update. Stepped animations update a few times a
 // second; interpolated ("Smooth") ones are blended on the CPU on every rendered frame, which is what costs FPS.
 function perfEstimate(fps = 240) {
-  const S = st.res / 16, pf = st.perf, rate = (el) => el.animFps === "smooth" ? fps : 20 / el.speed;
+  const S = st.res / 16, pf = st.perf, rate = (el, kind) => el.animFps === "smooth" ? fps : animFrames(el, kind).fps;
   const aH = pf.animHearts, aHC = aH && pf.animHardcore, aX = pf.animXP;
   const heartPx = 18 * S * 9 * S, xpPx = 182 * S * 5 * S;
-  return ((aH ? heartPx * rate(st.heart) : 0) + (aHC ? heartPx * rate(st.heart) : 0) + (aX ? xpPx * rate(st.xp) : 0)) / 1e6;
+  return ((aH ? heartPx * rate(st.heart, "heart") : 0) + (aHC ? heartPx * rate(st.heart, "heart") : 0) + (aX ? xpPx * rate(st.xp, "bar") : 0)) / 1e6;
 }
 function syncPerf() {
   const pf = st.perf, allOn = pf.animHearts && pf.animHardcore && pf.animXP;
@@ -3277,6 +3304,7 @@ async function buildPack(progress) {
   jobs.push(() => { put(BAR(S, 0, "bg", st.jump, 9, false), 0, 84); put(BAR(S, 0, "fill", st.jump, 9, false), 0, 89); });
   jobs.push(() => { for (let l = 0; l < 6; l++) put(pingIcon(S, l), 0, 176 + l * 8); });
 
+  const HA = animFrames(st.heart, "heart", st.res), XA = animFrames(st.xp, "bar", st.res), HEART_FRAMES = HA.n, XP_FRAMES = XA.n;
   const hw = 18 * S, hh = 9 * S, hearts = new Uint8ClampedArray(hw * hh * HEART_FRAMES * 4);
   // hardcore hearts get their own animation strip when the two rows look different
   const pf = st.perf || {}, aH = pf.animHearts !== false, aHC = aH && pf.animHardcore !== false, aX = pf.animXP !== false;
@@ -3316,9 +3344,9 @@ async function buildPack(progress) {
   const props = (src, x, y, w, h, dur, smooth) => `from=./${src}\nto=textures/gui/icons.png\nx=${x}\ny=${y}\nw=${w}\nh=${h}\nduration=${dur}\n`
     + (smooth ? "interpolate=true\n" : "");
   // animations that are switched off are left out entirely; their first frame stays in icons.png as a still image
-  if (aH) zip.file(anim + "hearts.properties", props("hearts.png", 52 * S, 0, 18 * S, 9 * S, st.heart.speed, st.heart.animFps === "smooth"));
-  if (aHC) zip.file(anim + "hearts_hardcore.properties", props(hcSeparate ? "hearts_hardcore.png" : "hearts.png", 52 * S, 45 * S, 18 * S, 9 * S, st.heart.speed, st.heart.animFps === "smooth"));
-  if (aX) zip.file(anim + "xp.properties", props("xp.png", 0, 69 * S, 182 * S, 5 * S, st.xp.speed, st.xp.animFps === "smooth"));
+  if (aH) zip.file(anim + "hearts.properties", props("hearts.png", 52 * S, 0, 18 * S, 9 * S, HA.dur, st.heart.animFps === "smooth"));
+  if (aHC) zip.file(anim + "hearts_hardcore.properties", props(hcSeparate ? "hearts_hardcore.png" : "hearts.png", 52 * S, 45 * S, 18 * S, 9 * S, HA.dur, st.heart.animFps === "smooth"));
+  if (aX) zip.file(anim + "xp.properties", props("xp.png", 0, 69 * S, 182 * S, 5 * S, XA.dur, st.xp.animFps === "smooth"));
   progress(1, "Zipping…"); await pause();
   return zip.generateAsync({ type: "blob", compression: "STORE" });
 }

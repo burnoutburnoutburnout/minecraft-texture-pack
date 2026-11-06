@@ -25,6 +25,7 @@ async function buildPack(progress) {
   jobs.push(() => { put(BAR(S, 0, "bg", st.jump, 9, false), 0, 84); put(BAR(S, 0, "fill", st.jump, 9, false), 0, 89); });
   jobs.push(() => { for (let l = 0; l < 6; l++) put(pingIcon(S, l), 0, 176 + l * 8); });
 
+  const HA = animFrames(st.heart, "heart", st.res), XA = animFrames(st.xp, "bar", st.res), HEART_FRAMES = HA.n, XP_FRAMES = XA.n;
   const hw = 18 * S, hh = 9 * S, hearts = new Uint8ClampedArray(hw * hh * HEART_FRAMES * 4);
   // hardcore hearts get their own animation strip when the two rows look different
   const pf = st.perf || {}, aH = pf.animHearts !== false, aHC = aH && pf.animHardcore !== false, aX = pf.animXP !== false;
@@ -64,9 +65,9 @@ async function buildPack(progress) {
   const props = (src, x, y, w, h, dur, smooth) => `from=./${src}\nto=textures/gui/icons.png\nx=${x}\ny=${y}\nw=${w}\nh=${h}\nduration=${dur}\n`
     + (smooth ? "interpolate=true\n" : "");
   // animations that are switched off are left out entirely; their first frame stays in icons.png as a still image
-  if (aH) zip.file(anim + "hearts.properties", props("hearts.png", 52 * S, 0, 18 * S, 9 * S, st.heart.speed, st.heart.animFps === "smooth"));
-  if (aHC) zip.file(anim + "hearts_hardcore.properties", props(hcSeparate ? "hearts_hardcore.png" : "hearts.png", 52 * S, 45 * S, 18 * S, 9 * S, st.heart.speed, st.heart.animFps === "smooth"));
-  if (aX) zip.file(anim + "xp.properties", props("xp.png", 0, 69 * S, 182 * S, 5 * S, st.xp.speed, st.xp.animFps === "smooth"));
+  if (aH) zip.file(anim + "hearts.properties", props("hearts.png", 52 * S, 0, 18 * S, 9 * S, HA.dur, st.heart.animFps === "smooth"));
+  if (aHC) zip.file(anim + "hearts_hardcore.properties", props(hcSeparate ? "hearts_hardcore.png" : "hearts.png", 52 * S, 45 * S, 18 * S, 9 * S, HA.dur, st.heart.animFps === "smooth"));
+  if (aX) zip.file(anim + "xp.properties", props("xp.png", 0, 69 * S, 182 * S, 5 * S, XA.dur, st.xp.animFps === "smooth"));
   progress(1, "Zipping…"); await pause();
   return zip.generateAsync({ type: "blob", compression: "STORE" });
 }
