@@ -324,7 +324,7 @@ function hotbarSelIcon(S, hb, t) {
       over(p, ring, base);
       over(p, ring * Math.exp(-Math.abs(dH) / 0.2) * hb.selGlow * pulse, mixc(col, WHITE, 0.4));
       over(p, ring * Math.exp(dO / 0.3) * 0.9, scale3(col, gold ? 0.25 : 1));
-      over(p, (1 - cov(dO + 0.45)), unhex(hb.outlineCol));
+      over(p, (1 - cov(dO + 0.45)) * cov(dO), unhex(hb.outlineCol));
     } else if (style === "glow") {
       const g = dH > 0 ? Math.exp(-dH / 1.1) * sat(-dO / 0.8) : Math.exp(dH / 0.35) * 0.4;
       over(p, hb.selGlow * pulse * g * 0.85, col);
@@ -360,7 +360,7 @@ function hotbarSelIcon(S, hb, t) {
     } else {
       const lit = Y < 12 ? 1.15 : 0.85, plainC = hb.style === "stone" ? rgb(210, 210, 210) : col;
       over(p, ring, scale3(plainC, lit));
-      over(p, 1 - cov(dO + 0.5), rgb(20, 20, 20));
+      over(p, (1 - cov(dO + 0.5)) * cov(dO), rgb(20, 20, 20));
       over(p, ring * Math.exp(-((dH / 0.25) ** 2)) * 0.6, rgb(90, 90, 90));
     }
     putPx(img, k, p);

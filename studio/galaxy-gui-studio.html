@@ -2699,7 +2699,7 @@ function hotbarSelIcon(S, hb, t) {
       over(p, ring, base);
       over(p, ring * Math.exp(-Math.abs(dH) / 0.2) * hb.selGlow * pulse, mixc(col, WHITE, 0.4));
       over(p, ring * Math.exp(dO / 0.3) * 0.9, scale3(col, gold ? 0.25 : 1));
-      over(p, (1 - cov(dO + 0.45)), unhex(hb.outlineCol));
+      over(p, (1 - cov(dO + 0.45)) * cov(dO), unhex(hb.outlineCol));
     } else if (style === "glow") {
       const g = dH > 0 ? Math.exp(-dH / 1.1) * sat(-dO / 0.8) : Math.exp(dH / 0.35) * 0.4;
       over(p, hb.selGlow * pulse * g * 0.85, col);
@@ -2735,7 +2735,7 @@ function hotbarSelIcon(S, hb, t) {
     } else {
       const lit = Y < 12 ? 1.15 : 0.85, plainC = hb.style === "stone" ? rgb(210, 210, 210) : col;
       over(p, ring, scale3(plainC, lit));
-      over(p, 1 - cov(dO + 0.5), rgb(20, 20, 20));
+      over(p, (1 - cov(dO + 0.5)) * cov(dO), rgb(20, 20, 20));
       over(p, ring * Math.exp(-((dH / 0.25) ** 2)) * 0.6, rgb(90, 90, 90));
     }
     putPx(img, k, p);
@@ -3434,16 +3434,17 @@ chipSets["styles-xp"] = { tab: "xp", kind: "bar", names: XP_STYLE_NAMES, label: 
 chipSets["rift-xp"] = { tab: "xp", kind: "bar", names: Object.keys(RIFT_VARIANTS), label: n => RIFT_VARIANTS[n].label,
   render: n => elementIcon("bar", 3, Object.assign(clone(st.xp), { uiStyle: "rift", rift: riftParams(n) }), st.xp, 0.2, "fill"),
   pick: n => { st.xp.uiStyle = "rift"; st.xp.rift = riftParams(n); }, sel: () => st.xp.uiStyle === "rift" ? (st.xp.rift || {}).variant || "classic" : "" };
-function hbThumb(hb) {                     // first slots of the hotbar with the selection frame on slot 1
-  const c = document.createElement("canvas"); c.width = 112; c.height = 112; const g = c.getContext("2d");
+function hbThumb(hb, focus = "slot") {     // zoomed on the hotbar: a whole slot next to the selected one, or the selected slot itself
+  const c = document.createElement("canvas"); c.width = 112; c.height = 112; const g = c.getContext("2d"), S = 3.5;
   g.fillStyle = "#4f6b35"; g.fillRect(0, 0, 112, 112);
-  g.drawImage(toCanvas(hotbarIcon(3, hb, 0.2)), -37, 23); g.drawImage(toCanvas(hotbarSelIcon(3, hb, 0.2)), 20, 20);
+  const cx = focus === "sel" ? 31 : 44, ox = 56 - cx * S, oy = (112 - 22 * S) / 2;
+  g.drawImage(toCanvas(hotbarIcon(S, hb, 0.2)), ox, oy); g.drawImage(toCanvas(hotbarSelIcon(S, hb, 0.2)), ox + 19 * S, oy - S);
   return c;
 }
 chipSets["styles-hotbar"] = { tab: "hotbar", raw: true, names: Object.keys(HOTBAR_STYLES), label: n => HOTBAR_STYLES[n],
   render: n => hbThumb(Object.assign(clone(st.hotbar), { style: n, selStyle: "auto" })), pick: n => { st.hotbar.style = n; st.hotbar.enabled = true; }, sel: () => st.hotbar.style };
 chipSets["styles-hbsel"] = { tab: "hotbar", raw: true, names: Object.keys(HB_SEL_STYLES), label: n => HB_SEL_STYLES[n],
-  render: n => hbThumb(Object.assign(clone(st.hotbar), { selStyle: n })), pick: n => { st.hotbar.selStyle = n; }, sel: () => st.hotbar.selStyle };
+  render: n => hbThumb(Object.assign(clone(st.hotbar), { selStyle: n }), "sel"), pick: n => { st.hotbar.selStyle = n; }, sel: () => st.hotbar.selStyle };
 chipSets["buttons-hb"] = { tab: "hotbar", raw: true, names: Object.keys(HB_BUTTONS), label: n => HB_BUTTONS[n],
   render: n => { const hb = Object.assign(clone(st.hotbar), { buttons: n }), c = document.createElement("canvas"); c.width = 112; c.height = 112; const g = c.getContext("2d");
     ["normal", "hover", "disabled"].forEach((s2, k) => g.drawImage(toCanvas(hbButtonIcon(1, hb, s2, 104, 20)), 0, 0, 104, 20, 4, 14 + k * 30, 104, 20)); return c; },
