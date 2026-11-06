@@ -18,7 +18,7 @@ const DEFAULTS = {
   jump: { c1: "#5a2e06", c2: "#d28818", c3: "#ffe26e" },
   bubble: { col: "#78c8ff", style: "classic", accent: "#ffd27a", size: 1, rim: 1, shine: 1, alpha: 1 },
   cross: { col: "#ffffff", len: 4.5, thick: 1.0 },
-  res: 256, perf: { preset: "light", animHearts: true, animHardcore: true, animXP: true },
+  res: 128, perf: { preset: "light", animHearts: true, animHardcore: true, animXP: true },
 };
 const KEY = "galaxy-gui-studio-v4";
 function deepMerge(base, over) {
@@ -84,7 +84,7 @@ const FPS_OPTIONS = [["1", "20 fps (highest the game allows)"], ["2", "10 fps"],
 const NUM_SELECT = /(\.speed)$/;
 // frames in a loop: frame rate x loop length, capped so the texture stays a sane size (512x XP bars are large)
 function animFrames(el, kind, res = st.res) {
-  const cap = kind === "bar" ? (res >= 512 ? 64 : 160) : 240, loop = Math.max(1, +el.loopSec || 5);
+  const cap = kind === "bar" ? (res >= 512 ? 64 : res >= 256 ? 160 : 240) : 240, loop = Math.max(1, +el.loopSec || 5);
   let dur = Math.max(1, Math.round(+el.speed || 2)), n = Math.round(loop * 20 / dur);
   if (n > cap) { dur = Math.ceil(loop * 20 / cap); n = Math.round(loop * 20 / dur); }
   return { n: Math.max(2, n), dur, fps: 20 / dur, capped: dur !== Math.max(1, Math.round(+el.speed || 2)) };
@@ -647,7 +647,7 @@ function syncInputs() {
     else { inp.value = ctl.type === "speed" ? 5 - v : v; $(idOf(ctl.path) + "-o").textContent = fmt(ctl, v); }
   }
   for (const [set, cfg] of Object.entries(chipSets)) for (const b of $("chips-" + set).children) b.setAttribute("aria-pressed", String(b.dataset.name === cfg.sel()));
-  $("r256").setAttribute("aria-pressed", String(st.res === 256)); $("r512").setAttribute("aria-pressed", String(st.res === 512));
+  for (const r of RESOLUTIONS) $("r" + r).setAttribute("aria-pressed", String(st.res === r));
 }
 function wireVariations() {
   $("vary-make").addEventListener("click", makeVariations);
@@ -748,8 +748,8 @@ function changed() {
   if (EDIT[st.tab]) syncEditor(st.tab);
   timer = setTimeout(() => { buildPreview(); drawThumbs(); }, 150);
 }
-$("r256").addEventListener("click", () => { st.res = 256; syncInputs(); save(); });
-$("r512").addEventListener("click", () => { st.res = 512; syncInputs(); save(); });
+const RESOLUTIONS = [64, 128, 256, 512];
+for (const r of RESOLUTIONS) $("r" + r).addEventListener("click", () => { st.res = r; syncInputs(); changed(); });
 $("reset").addEventListener("click", () => { const tab = st.tab; st = clone(DEFAULTS); st.tab = tab; syncInputs(); changed(); showTab(); setStatus("Everything is back to the original pack.", "ok"); });
 $("copy").addEventListener("click", () => {
   const text = JSON.stringify(st, null, 2), done = () => setStatus("Settings copied. Paste them to Claude to update the repository.", "ok");
@@ -774,19 +774,26 @@ function perfEstimate(fps = 240) {
 function syncPerf() {
   const pf = st.perf, allOn = pf.animHearts && pf.animHardcore && pf.animXP;
   const sm = st.heart.animFps === "smooth" && st.xp.animFps === "smooth", stp = st.heart.animFps === "ticks" && st.xp.animFps === "ticks";
-  pf.preset = !allOn ? "custom" : sm ? "smooth" : stp && st.res === 256 ? "light" : stp ? "balanced" : "custom";
+  const noneOn = !pf.animHearts && !pf.animXP;
+  pf.preset = noneOn ? (st.res <= 128 ? "none" : "custom") : !allOn ? "custom" : sm ? "smooth"
+    : stp && st.res <= 128 && +st.heart.speed >= 2 && +st.xp.speed >= 2 ? "light" : stp ? "balanced" : "custom";
   $("perf-preset").value = pf.preset;
   $("perf-hearts").checked = pf.animHearts; $("perf-hc").checked = pf.animHardcore; $("perf-xp").checked = pf.animXP;
   $("perf-hc").disabled = !pf.animHearts;
   const m = perfEstimate(), smooth = st.heart.animFps === "smooth" || st.xp.animFps === "smooth";
   const level = m < 8 ? ["Light", "ok"] : m < 40 ? ["Moderate", ""] : ["Heavy: likely to lower your FPS", "err"];
-  $("perf-est").textContent = `${level[0]}. About ${m < 10 ? m.toFixed(1) : Math.round(m)} million pixels a second of animation work`
-    + (smooth ? " at 240 FPS (Smooth animation costs more the higher your FPS)." : ".");
-  $("perf-est").className = "status " + level[1];
+  const vram = Math.round((256 * st.res / 16) ** 2 * 4 / 1048576);
+  $("perf-est").textContent = (m === 0 ? "No animation work at all: the HUD is still images, so it runs like vanilla."
+    : `${level[0]}. About ${m < 10 ? m.toFixed(1) : Math.round(m)} million pixels a second of animation work`
+      + (smooth ? " at 240 FPS (Smooth animation costs more the higher your FPS)." : "."))
+    + ` The ${st.res}x icons texture takes about ${vram} MB of video memory.`;
+  $("perf-est").className = "status " + (m === 0 ? "ok" : level[1]);
 }
 function applyPerfPreset(p) {
   const pf = st.perf; pf.preset = p;
-  if (p === "light") { st.res = 256; st.heart.animFps = "ticks"; st.xp.animFps = "ticks"; Object.assign(pf, { animHearts: true, animHardcore: true, animXP: true }); }
+  if (p === "none") { st.res = 128; Object.assign(pf, { animHearts: false, animHardcore: false, animXP: false }); }
+  if (p === "light") { st.res = 128; st.heart.animFps = "ticks"; st.xp.animFps = "ticks"; st.heart.speed = Math.max(2, +st.heart.speed); st.xp.speed = Math.max(2, +st.xp.speed);
+    Object.assign(pf, { animHearts: true, animHardcore: true, animXP: true }); }
   if (p === "balanced") { st.heart.animFps = "ticks"; st.xp.animFps = "ticks"; Object.assign(pf, { animHearts: true, animHardcore: true, animXP: true }); }
   if (p === "smooth") { st.heart.animFps = "smooth"; st.xp.animFps = "smooth"; Object.assign(pf, { animHearts: true, animHardcore: true, animXP: true }); }
 }

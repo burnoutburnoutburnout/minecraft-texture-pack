@@ -163,6 +163,8 @@ code { font-family: var(--font-mono); font-size: 0.9em; }
         <h2 id="h-export"><span class="dot"></span>Build the pack</h2>
         <div class="export-row">
           <div class="seg" role="group" aria-label="Resolution">
+            <button type="button" id="r64" aria-pressed="false">64x</button>
+            <button type="button" id="r128" aria-pressed="false">128x</button>
             <button type="button" id="r256" aria-pressed="true">256x</button>
             <button type="button" id="r512" aria-pressed="false">512x</button>
           </div>
@@ -173,7 +175,7 @@ code { font-family: var(--font-mono); font-size: 0.9em; }
         <div class="progress" aria-hidden="true"><div id="bar"></div></div>
         <p class="status" id="status" role="status"></p>
         <ul class="notes">
-          <li>512x builds an 8192 × 8192 icons file. It takes longer and needs a desktop browser.</li>
+          <li>For FPS, 128x is the sweet spot: at normal GUI scales it looks the same as 256x or 512x (the game shows the HUD with only a few screen pixels per texture pixel), with a much smaller texture. 512x builds an 8192 × 8192 icons file.</li>
           <li>Install: put the zip in <code>.minecraft/resourcepacks/</code> without unzipping it.</li>
           <li>Your edits are remembered in this browser. Use Copy settings to send them to Claude.</li>
         </ul>
@@ -182,7 +184,8 @@ code { font-family: var(--font-mono); font-size: 0.9em; }
           <div class="export-row">
             <label class="sr-only" for="perf-preset">Performance preset</label>
             <select id="perf-preset">
-              <option value="light">Best FPS: 256x, stepped animation</option>
+              <option value="none">No FPS cost: 128x, still images (no animation)</option>
+              <option value="light">Best FPS animated: 128x, 10 fps, no smoothing</option>
               <option value="balanced">Balanced: stepped animation</option>
               <option value="smooth">Smoothest: interpolated every frame (heavy)</option>
               <option value="custom">Custom</option>
