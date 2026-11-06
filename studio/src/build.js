@@ -27,7 +27,8 @@ async function buildPack(progress) {
 
   const hw = 18 * S, hh = 9 * S, hearts = new Uint8ClampedArray(hw * hh * HEART_FRAMES * 4);
   // hardcore hearts get their own animation strip when the two rows look different
-  const hcSeparate = (st.heart.hardcore || "world") === "world", heartsHC = hcSeparate ? new Uint8ClampedArray(hearts.length) : null;
+  const pf = st.perf || {}, aH = pf.animHearts !== false, aHC = aH && pf.animHardcore !== false, aX = pf.animXP !== false;
+  const hcSeparate = aHC && (st.heart.hardcore || "world") === "world", heartsHC = hcSeparate ? new Uint8ClampedArray(hearts.length) : null;
   const strip = (buf, row) => f => jobs.push(() => {
     HEART_ROW = row;
     try {
@@ -39,10 +40,10 @@ async function buildPack(progress) {
       }
     } finally { HEART_ROW = "normal"; }
   });
-  for (let f = 0; f < HEART_FRAMES; f++) strip(hearts, "normal")(f);
+  if (aH) for (let f = 0; f < HEART_FRAMES; f++) strip(hearts, "normal")(f);
   if (hcSeparate) for (let f = 0; f < HEART_FRAMES; f++) strip(heartsHC, "hardcore")(f);
   const xw = 182 * S, xh = 5 * S, xp = new Uint8ClampedArray(xw * xh * XP_FRAMES * 4);
-  for (let f = 0; f < XP_FRAMES; f++) jobs.push(() => xp.set(BAR(S, f / XP_FRAMES, "fill").data, f * xw * xh * 4));
+  if (aX) for (let f = 0; f < XP_FRAMES; f++) jobs.push(() => xp.set(BAR(S, f / XP_FRAMES, "fill").data, f * xw * xh * 4));
 
   const total = jobs.length + 4;
   for (let i = 0; i < jobs.length; i++) { jobs[i](); progress((i + 1) / total, "Drawing textures…"); await pause(); }
@@ -55,16 +56,17 @@ async function buildPack(progress) {
   progress((jobs.length + 1) / total, "Compressing icons…"); await pause();
   zip.file("assets/minecraft/textures/gui/icons.png", encodePNG(icons, Wd, Wd));
   progress((jobs.length + 2) / total, "Compressing heart animation…"); await pause();
-  zip.file(anim + "hearts.png", encodePNG(hearts, hw, hh * HEART_FRAMES));
+  if (aH) zip.file(anim + "hearts.png", encodePNG(hearts, hw, hh * HEART_FRAMES));
   if (hcSeparate) zip.file(anim + "hearts_hardcore.png", encodePNG(heartsHC, hw, hh * HEART_FRAMES));
   progress((jobs.length + 3) / total, "Compressing XP animation…"); await pause();
-  zip.file(anim + "xp.png", encodePNG(xp, xw, xh * XP_FRAMES));
+  if (aX) zip.file(anim + "xp.png", encodePNG(xp, xw, xh * XP_FRAMES));
   // interpolate=true (OptiFine 1.8.9 HD U L5 or newer) blends frames on every rendered frame instead of stepping each tick
   const props = (src, x, y, w, h, dur, smooth) => `from=./${src}\nto=textures/gui/icons.png\nx=${x}\ny=${y}\nw=${w}\nh=${h}\nduration=${dur}\n`
     + (smooth ? "interpolate=true\n" : "");
-  zip.file(anim + "hearts.properties", props("hearts.png", 52 * S, 0, 18 * S, 9 * S, st.heart.speed, st.heart.animFps === "smooth"));
-  zip.file(anim + "hearts_hardcore.properties", props(hcSeparate ? "hearts_hardcore.png" : "hearts.png", 52 * S, 45 * S, 18 * S, 9 * S, st.heart.speed, st.heart.animFps === "smooth"));
-  zip.file(anim + "xp.properties", props("xp.png", 0, 69 * S, 182 * S, 5 * S, st.xp.speed, st.xp.animFps === "smooth"));
+  // animations that are switched off are left out entirely; their first frame stays in icons.png as a still image
+  if (aH) zip.file(anim + "hearts.properties", props("hearts.png", 52 * S, 0, 18 * S, 9 * S, st.heart.speed, st.heart.animFps === "smooth"));
+  if (aHC) zip.file(anim + "hearts_hardcore.properties", props(hcSeparate ? "hearts_hardcore.png" : "hearts.png", 52 * S, 45 * S, 18 * S, 9 * S, st.heart.speed, st.heart.animFps === "smooth"));
+  if (aX) zip.file(anim + "xp.properties", props("xp.png", 0, 69 * S, 182 * S, 5 * S, st.xp.speed, st.xp.animFps === "smooth"));
   progress(1, "Zipping…"); await pause();
   return zip.generateAsync({ type: "blob", compression: "STORE" });
 }

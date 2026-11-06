@@ -18,7 +18,7 @@ const DEFAULTS = {
   jump: { c1: "#5a2e06", c2: "#d28818", c3: "#ffe26e" },
   bubble: { col: "#78c8ff", style: "classic", accent: "#ffd27a", size: 1, rim: 1, shine: 1, alpha: 1 },
   cross: { col: "#ffffff", len: 4.5, thick: 1.0 },
-  res: 256,
+  res: 256, perf: { preset: "light", animHearts: true, animHardcore: true, animXP: true },
 };
 const KEY = "galaxy-gui-studio-v4";
 function deepMerge(base, over) {
@@ -603,6 +603,7 @@ function makeVariations() {
   $("vary-back").disabled = true;
 }
 function syncInputs() {
+  if ($("perf-est")) syncPerf();
   for (const ctl of allControls) {
     const v = getP(ctl.path), inp = $(idOf(ctl.path));
     if (ctl.type === "color") inp.value = v;
@@ -704,6 +705,7 @@ requestAnimationFrame(drawHud);
 
 let timer = null;
 function changed() {
+  if ($("perf-est")) syncPerf();
   save(); clearTimeout(timer);
   if (EDIT[st.tab]) syncEditor(st.tab);
   timer = setTimeout(() => { buildPreview(); drawThumbs(); }, 150);
@@ -722,6 +724,38 @@ function fallbackCopy(text) {
   document.body.removeChild(ta);
   setStatus(ok ? "Settings copied. Paste them to Claude to update the repository." : "Copy was blocked here. Your settings are still saved in this browser.", ok ? "ok" : "err");
 }
+/* ---------- performance ---------- */
+// OptiFine copies each animated region into icons.png on every update. Stepped animations update a few times a
+// second; interpolated ("Smooth") ones are blended on the CPU on every rendered frame, which is what costs FPS.
+function perfEstimate(fps = 240) {
+  const S = st.res / 16, pf = st.perf, rate = (el) => el.animFps === "smooth" ? fps : 20 / el.speed;
+  const aH = pf.animHearts, aHC = aH && pf.animHardcore, aX = pf.animXP;
+  const heartPx = 18 * S * 9 * S, xpPx = 182 * S * 5 * S;
+  return ((aH ? heartPx * rate(st.heart) : 0) + (aHC ? heartPx * rate(st.heart) : 0) + (aX ? xpPx * rate(st.xp) : 0)) / 1e6;
+}
+function syncPerf() {
+  const pf = st.perf, allOn = pf.animHearts && pf.animHardcore && pf.animXP;
+  const sm = st.heart.animFps === "smooth" && st.xp.animFps === "smooth", stp = st.heart.animFps === "ticks" && st.xp.animFps === "ticks";
+  pf.preset = !allOn ? "custom" : sm ? "smooth" : stp && st.res === 256 ? "light" : stp ? "balanced" : "custom";
+  $("perf-preset").value = pf.preset;
+  $("perf-hearts").checked = pf.animHearts; $("perf-hc").checked = pf.animHardcore; $("perf-xp").checked = pf.animXP;
+  $("perf-hc").disabled = !pf.animHearts;
+  const m = perfEstimate(), smooth = st.heart.animFps === "smooth" || st.xp.animFps === "smooth";
+  const level = m < 8 ? ["Light", "ok"] : m < 40 ? ["Moderate", ""] : ["Heavy: likely to lower your FPS", "err"];
+  $("perf-est").textContent = `${level[0]}. About ${m < 10 ? m.toFixed(1) : Math.round(m)} million pixels a second of animation work`
+    + (smooth ? " at 240 FPS (Smooth animation costs more the higher your FPS)." : ".");
+  $("perf-est").className = "status " + level[1];
+}
+function applyPerfPreset(p) {
+  const pf = st.perf; pf.preset = p;
+  if (p === "light") { st.res = 256; st.heart.animFps = "ticks"; st.xp.animFps = "ticks"; Object.assign(pf, { animHearts: true, animHardcore: true, animXP: true }); }
+  if (p === "balanced") { st.heart.animFps = "ticks"; st.xp.animFps = "ticks"; Object.assign(pf, { animHearts: true, animHardcore: true, animXP: true }); }
+  if (p === "smooth") { st.heart.animFps = "smooth"; st.xp.animFps = "smooth"; Object.assign(pf, { animHearts: true, animHardcore: true, animXP: true }); }
+}
+$("perf-preset").addEventListener("change", () => { applyPerfPreset($("perf-preset").value); syncInputs(); changed(); });
+for (const [id, key] of [["perf-hearts", "animHearts"], ["perf-hc", "animHardcore"], ["perf-xp", "animXP"]])
+  $(id).addEventListener("change", () => { st.perf[key] = $(id).checked; st.perf.preset = "custom"; syncInputs(); save(); });
+
 /* ---------- saved setups ---------- */
 const SAVES_KEY = "galaxy-gui-studio-saves";
 function readSaves() { try { return JSON.parse(localStorage.getItem(SAVES_KEY) || "[]"); } catch (e) { return []; } }

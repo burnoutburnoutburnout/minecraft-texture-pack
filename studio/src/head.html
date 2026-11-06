@@ -176,6 +176,24 @@ code { font-family: var(--font-mono); font-size: 0.9em; }
           <li>Install: put the zip in <code>.minecraft/resourcepacks/</code> without unzipping it.</li>
           <li>Your edits are remembered in this browser. Use Copy settings to send them to Claude.</li>
         </ul>
+        <div class="saves" id="perf-box">
+          <p class="group-label">Performance in game</p>
+          <div class="export-row">
+            <label class="sr-only" for="perf-preset">Performance preset</label>
+            <select id="perf-preset">
+              <option value="light">Best FPS: 256x, stepped animation</option>
+              <option value="balanced">Balanced: stepped animation</option>
+              <option value="smooth">Smoothest: interpolated every frame (heavy)</option>
+              <option value="custom">Custom</option>
+            </select>
+          </div>
+          <div class="export-row">
+            <label class="toggle" for="perf-hearts"><input type="checkbox" id="perf-hearts">Animate hearts</label>
+            <label class="toggle" for="perf-hc"><input type="checkbox" id="perf-hc">Animate hardcore hearts</label>
+            <label class="toggle" for="perf-xp"><input type="checkbox" id="perf-xp">Animate XP bar</label>
+          </div>
+          <p class="status" id="perf-est"></p>
+        </div>
         <div class="saves">
           <p class="group-label">Saved setups</p>
           <div class="export-row">
