@@ -233,6 +233,8 @@ const SECTIONS = [
   ...elSections("heart", "heart", "Hearts", ""),
   ...elSections("armor", "armor", "Armor", ""),
   ...elSections("xp", "bar", "XP bar", "xp"),
+  { id: "hb-designs", tab: "hotbar", title: "Hotbar designs", cls: "", chips: "hb-designs",
+    hint: "Complete looks that mix a style, shape, bar outline, turn pattern and size pattern. Pick one, then change anything in the cards below.", groups: [] },
   { id: "hb-style", tab: "hotbar", title: "Hotbar style", cls: "", chips: "styles-hotbar",
     hint: "Replaces the hotbar in textures/gui/widgets.png. That file also holds the menu buttons, so the pack draws matching buttons (pick them below).", groups: [
     { controls: [TG("hotbar.enabled", "Include the hotbar and buttons in the pack")] }] },
@@ -245,13 +247,15 @@ const SECTIONS = [
       R("hotbar.rb.cycles", "Colour cycles per loop", 0, 4, 1), R("hotbar.rb.angle", "Stripe angle", -80, 80, 1), R("hotbar.rb.slotTint", "Colour in the slots", 0, 1, 0.01),
       R("hotbar.rb.shimmer", "Shimmer", 0, 1.5, 0.01)] }] },
   { id: "hb-shape", tab: "hotbar", title: "Shape & rotation", cls: "", chips: [["hb-shape", "Slot shape"], ["hb-bar", "Bar shape"]],
-    hint: "Items still sit in the same place; shapes are fitted inside each slot. The selected-slot frame takes the same shape and turn.", groups: [
-    { controls: [R("hotbar.rot", "Rotation (degrees)", -90, 90, 1), R("hotbar.spin", "Spin (turns per loop, minus = other way)", -3, 3, 1), TG("hotbar.alt", "Alternate the turn on every other slot")] }] },
+    hint: "Items always sit in the same place; shapes are fitted inside each slot. The selected-slot frame takes the same shape, slant and spin, and the turn too unless every slot is turned differently (fan, random, wave).", groups: [
+    { label: "Turn", controls: [SEL("hotbar.rotMode", "Turn pattern", Object.entries(HB_ROT_MODES)), R("hotbar.rot", "Turn amount (degrees)", -90, 90, 1),
+      R("hotbar.spin", "Spin (turns per loop, minus = other way)", -3, 3, 1)] },
+    { label: "Lean & size", controls: [R("hotbar.skew", "Slant", -0.6, 0.6, 0.01), SEL("hotbar.sizeMode", "Size pattern", Object.entries(HB_SIZE_MODES)), R("hotbar.window", "Slot size", -0.5, 1.4, 0.01)] }] },
   { id: "hb-sel", tab: "hotbar", title: "Selected slot frame", cls: "", chips: "styles-hbsel", groups: [
     { controls: [C("hotbar.selCol", "Frame colour")] },
     { controls: [R("hotbar.selW", "Frame thickness", 1, 3.7, 0.05), R("hotbar.selGlow", "Glow", 0, 1.5, 0.01), R("hotbar.pulse", "Pulse", 0, 1, 0.01), R("hotbar.orbit", "Orbiting stars", 1, 4, 1)] }] },
   { id: "hb-look", tab: "hotbar", title: "Hotbar look", cls: "", groups: [
-    { controls: [R("hotbar.slotA", "Slot opacity", 0, 1, 0.01), R("hotbar.railA", "Frame opacity", 0, 1, 0.01), R("hotbar.window", "Slot size", -0.5, 1.4, 0.01),
+    { controls: [R("hotbar.slotA", "Slot opacity", 0, 1, 0.01), R("hotbar.railA", "Frame opacity", 0, 1, 0.01),
       R("hotbar.round", "Rounded slots", 0, 0.5, 0.01), R("hotbar.frameW", "Outline thickness", 0, 1.2, 0.01), R("hotbar.glow", "Glow", 0, 1.5, 0.01),
       R("hotbar.shine", "Shine and travelling lights", 0, 1.5, 0.01), R("hotbar.stars", "Stars", 0, 3, 0.05), R("hotbar.texScale", "Galaxy size", 0.3, 3, 0.01)] }] },
   { id: "hb-anim", tab: "hotbar", title: "Hotbar animation", cls: "", groups: [
@@ -606,6 +610,14 @@ function hbThumbWhole(hb) {                // the whole bar, to show its outline
   return c;
 }
 const GAL_STYLES = ["galaxy", "nebula", "celestial"];
+function hbWide(hb) {                      // the whole hotbar with the frame on slot 2, for the design gallery
+  const c = document.createElement("canvas"), S = 4; c.width = 186 * S; c.height = 26 * S; const g = c.getContext("2d");
+  g.fillStyle = "#4f6b35"; g.fillRect(0, 0, c.width, c.height);
+  g.drawImage(toCanvas(hotbarIcon(S, hb, 0.2)), 2 * S, 2 * S); g.drawImage(toCanvas(hotbarSelIcon(S, hb, 0.2)), 21 * S, S);
+  return c;
+}
+chipSets["hb-designs"] = { tab: "hotbar", raw: true, wide: true, names: Object.keys(HB_DESIGNS), label: n => HB_DESIGNS[n].label,
+  render: n => hbWide(hbDesign(st.hotbar, n)), pick: n => { st.hotbar = hbDesign(st.hotbar, n); }, sel: () => st.hotbar.design || "" };
 chipSets["hb-gal"] = { tab: "hotbar", raw: true, names: Object.keys(HB_GAL_VARIANTS), label: n => HB_GAL_VARIANTS[n].label,
   render: n => { const v = HB_GAL_VARIANTS[n], hb = Object.assign(clone(st.hotbar), { c1: v.c[0], c2: v.c[1], c3: v.c[2], accent: v.c[3], gal: galParams(n), selStyle: "auto" }, v.o);
     if (!GAL_STYLES.includes(hb.style)) hb.style = "galaxy"; return hbThumb(hb); },
@@ -624,7 +636,8 @@ const thumbs = [];
 for (const [set, cfg] of Object.entries(chipSets)) {
   for (const name of cfg.names) {
     const b = document.createElement("button"); b.type = "button"; b.className = "design"; b.dataset.name = name;
-    const c = document.createElement("canvas"); c.width = 112; c.height = 112; b.appendChild(c);
+    const c = document.createElement("canvas"); c.width = cfg.wide ? 744 : 112; c.height = cfg.wide ? 104 : 112; b.appendChild(c);
+    if (cfg.wide) $("chips-" + set).classList.add("wide"); else if (cfg.raw) $("chips-" + set).classList.add("big");
     const s = document.createElement("span"); s.textContent = cfg.label(name); b.appendChild(s);
     b.addEventListener("click", () => { cfg.pick(name); syncInputs(); changed(); });
     $("chips-" + set).appendChild(b); thumbs.push({ c, tab: cfg.tab, bar: cfg.kind === "bar", raw: !!cfg.raw, draw: () => cfg.render(name) });
@@ -633,7 +646,7 @@ for (const [set, cfg] of Object.entries(chipSets)) {
 function drawThumbs() {
   for (const th of thumbs) {
     if (th.tab !== st.tab) continue;
-    const g = th.c.getContext("2d"); g.clearRect(0, 0, 112, 112);
+    const g = th.c.getContext("2d"); g.clearRect(0, 0, th.c.width, th.c.height);
     if (th.raw) { g.drawImage(th.draw(), 0, 0); continue; }
     const img = toCanvas(th.draw());
     if (th.bar) g.drawImage(img, 0, 0, 111, 15, 0, 48, 112, 15);

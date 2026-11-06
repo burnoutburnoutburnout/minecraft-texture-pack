@@ -25,14 +25,35 @@ const HB_SHAPES = {
   shield: { label: "Shield", sym: 0, pts: [[-1, -1], [1, -1], [1, 0.25], [0, 1.15], [-1, 0.25]] },
 };
 for (const sh of Object.values(HB_SHAPES)) if (!sh.sd) sh.sd = polySD(sh.pts);
-const HB_BAR_SHAPES = { box: "Straight", rounded: "Rounded", pill: "Pill", chamfer: "Cut corners", notch: "Notched", scallop: "Scalloped", tiles: "Separate tiles" };
+const HB_BAR_SHAPES = { box: "Straight", rounded: "Rounded", pill: "Pill", chamfer: "Cut corners", slant: "Slanted", notch: "Notched", scallop: "Scalloped", tiles: "Separate tiles" };
 /* how far the shape reaches (x, y) at angle a, for size h */
-function shapeExt(shape, h, a) {
+function shapeExt(shape, h, a, k = 0) {
   const c = Math.cos(a), sn = Math.sin(a); let ex = 0, ey = 0;
-  for (const [x, y] of HB_SHAPES[shape].pts) { ex = Math.max(ex, Math.abs(x * c - y * sn)); ey = Math.max(ey, Math.abs(x * sn + y * c)); }
+  for (const [x, y] of HB_SHAPES[shape].pts) { const rx = x * c - y * sn, ry = x * sn + y * c; ex = Math.max(ex, Math.abs(rx + k * ry)); ey = Math.max(ey, Math.abs(ry)); }
   return [ex * h, ey * h];
 }
-const shapeR = shape => Math.max(...HB_SHAPES[shape].pts.map(([x, y]) => Math.hypot(x, y)));
+const shapeR = (shape, k = 0) => Math.max(...HB_SHAPES[shape].pts.map(([x, y]) => Math.hypot(x, y))) * (1 + Math.abs(k));
+const HB_ROT_MODES = { same: "All the same", alternate: "Alternate left / right", fan: "Fan out (like cards)", random: "Random tilt", rock: "Rock together (animated)",
+  wave: "Wave along the bar (animated)" };
+const HB_SIZE_MODES = { even: "All the same", alternate: "Big and small", center: "Bigger in the middle", ends: "Bigger at the ends", breathe: "Breathing (animated)" };
+/* each slot's turn and size at time t */
+function hbSlotGeo(hb, t) {
+  const shape = HB_SHAPES[hb.slotShape] ? hb.slotShape : "square", SH = HB_SHAPES[shape], spin = Math.round(+hb.spin || 0), k = +hb.skew || 0;
+  const mode = hb.rotMode && HB_ROT_MODES[hb.rotMode] ? hb.rotMode : hb.alt ? "alternate" : "same";
+  const rot0 = (+hb.rot || 0) * Math.PI / 180, spinA = SH.sym ? spin * TAU * t / SH.sym : spin * TAU * t, animated = spin || mode === "rock" || mode === "wave";
+  const hsRaw = 8 + hb.window, angs = [], hsA = [];
+  for (let n = 0; n < 9; n++) {
+    const sg = mode === "alternate" && n % 2 ? -1 : 1;
+    const base = mode === "fan" ? rot0 * (n - 4) / 4 : mode === "random" ? rot0 * (uhash(n, 3, 9) * 2 - 1) : mode === "rock" ? rot0 * Math.sin(TAU * t)
+      : mode === "wave" ? rot0 * Math.sin(TAU * (t - n / 9)) : rot0;
+    angs.push(sg * (base + spinA));
+    const ext = animated ? [shapeR(shape, k) * hsRaw, shapeR(shape, k) * hsRaw] : shapeExt(shape, hsRaw, angs[n], k);
+    const sz = hb.sizeMode === "alternate" ? (n % 2 ? 0.8 : 1) : hb.sizeMode === "center" ? 0.74 + 0.26 * (1 - Math.abs(n - 4) / 4)
+      : hb.sizeMode === "ends" ? 0.74 + 0.26 * Math.abs(n - 4) / 4 : hb.sizeMode === "breathe" ? 0.86 + 0.14 * Math.sin(TAU * (t - n / 9)) : 1;
+    hsA.push(hsRaw * Math.min(1, 9.5 / ext[0], 10.2 / ext[1]) * sz);
+  }
+  return { shape, SH, angs, hsA, k, mode, spinA, rot0 };
+}
 /* galaxy variants: colours plus extra galaxy effects */
 const HB_GAL_VARIANTS = {
   deep: { label: "Deep space", c: ["#160c46", "#4a2ab8", "#9c6cff", "#b48cff"], gal: {}, o: { stars: 1, shoot: 1 } },
@@ -71,7 +92,7 @@ const HB_DEFAULTS = { enabled: true, style: "galaxy", selStyle: "auto", buttons:
   c1: "#160c46", c2: "#4a2ab8", c3: "#9c6cff", accent: "#b48cff", selCol: "#efe4ff", slotCol: "#0a0814", outlineCol: "#05030c", goldCol: "#e0b04a",
   slotA: 0.7, railA: 1, window: 0.6, round: 0.15, frameW: 0.5, glow: 0.8, shine: 0.6, stars: 1, texScale: 1,
   pulse: 0.5, selW: 2.4, selGlow: 0.9, orbit: 1, speed: 2, loopSec: 6, animFps: "ticks", motion: "random", shoot: 1,
-  slotShape: "square", barShape: "box", rot: 0, alt: false, spin: 0, gal: clone(HB_GAL_BASE), rb: clone(HB_RB_BASE) };
+  slotShape: "square", barShape: "box", rot: 0, alt: false, spin: 0, rotMode: "same", sizeMode: "even", skew: 0, gal: clone(HB_GAL_BASE), rb: clone(HB_RB_BASE) };
 const hbStill = hb => ["stone"].includes(hb.style) && hbSelStyle(hb) === "stone" && !(+hb.spin);
 const hbSelStyle = hb => hb.selStyle === "auto" ? HB_AUTO_SEL[hb.style] || "glow" : hb.selStyle;
 function hsv(h, sv, v) {
@@ -140,6 +161,7 @@ function hbBarSD(shape, X, Y, dWn, fw) {
     case "notch": { const n = Math.max(1, Math.min(8, Math.round((X - 1) / 20))); return Math.max(box, -(Math.hypot(X - (1 + 20 * n), Y - (Y < 11 ? 0 : 22)) - 2.3)); }
     case "scallop": return Math.max(Math.abs(X - 91) - 91, Math.abs(Y - 11) - (9.7 + 1.3 * Math.cos(TAU * (X - 11) / 20)));
     case "tiles": return Math.max(box, dWn - 1.4 - fw);
+    case "slant": return Math.max(Math.abs(Y - 11) - 11, (Math.abs(X - 91 + (Y - 11) * 0.5) - 85.5) * 0.894);
     default: return box;
   }
 }
@@ -155,17 +177,13 @@ function hotbarIcon(S, hb, t) {
   const buf = ["galaxy", "nebula", "celestial"].includes(style) || (style === "rainbow" && R.mode === "galaxy") ? hbGalaxy(S, 182, 22, t, hb, P, 21) : null;
   const acc = unhex(hb.accent), slotC = unhex(hb.slotCol), outC = unhex(hb.outlineCol), gold = unhex(hb.goldCol);
   // slot shape, size fitted to its cell, rotation (alternating and spinning)
-  const shape = HB_SHAPES[hb.slotShape] ? hb.slotShape : "square", SH = HB_SHAPES[shape], spin = Math.round(+hb.spin || 0);
-  const rot0 = (+hb.rot || 0) * Math.PI / 180, spinA = SH.sym ? spin * TAU * t / SH.sym : spin * TAU * t;
-  const hsRaw = 8 + hb.window, ext = spin ? [shapeR(shape) * hsRaw, shapeR(shape) * hsRaw] : shapeExt(shape, hsRaw, rot0);
-  const hs = hsRaw * Math.min(1, 9.5 / ext[0], 10.2 / ext[1]);
-  const angs = [0, 1, 2, 3, 4, 5, 6, 7, 8].map(n => (hb.alt && n % 2 ? -1 : 1) * (rot0 + spinA));
+  const GEO = hbSlotGeo(hb, t), SH = GEO.SH, angs = GEO.angs, hsA = GEO.hsA, kS = GEO.k;
   const fw = hb.frameW, glow = hb.glow, pulse = 1 + hb.pulse * 0.3 * Math.sin(TAU * 2 * t);
   const twinkle = (n, seed) => 0.5 + 0.5 * Math.sin(TAU * ((1 + (n % 3)) * t + uhash(n, seed, 3)));
   for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
     const k = j * W + i, X = (i + 0.5) / S, Y = (j + 0.5) / S, p = px0();
     const si = Math.max(0, Math.min(8, Math.floor((X - 1) / 20))), cx = 11 + 20 * si;
-    const a = angs[si], ca = Math.cos(a), sa = Math.sin(a), lx = ca * (X - cx) + sa * (Y - 11), ly = -sa * (X - cx) + ca * (Y - 11);
+    const a = angs[si], ca = Math.cos(a), sa = Math.sin(a), hs = hsA[si], dx = X - cx - kS * (Y - 11), lx = ca * dx + sa * (Y - 11), ly = -sa * dx + ca * (Y - 11);
     const dW = SH.sd(lx, ly, hs, hb.round), dB = hbBarSD(hb.barShape, X, Y, dW, fw), inBar = cov(dB);
     if (inBar <= 0) continue;
     const inWin = cov(dW), rail = 1 - inWin, edgeBand = 1 - cov(dB + fw);           // outer outline band
@@ -284,7 +302,7 @@ function hotbarIcon(S, hb, t) {
       over(p, lineV * (0.55 + hb.shine * 0.45 * Math.exp(-((dA / 0.09) ** 2))), mixc(acc, WHITE, 0.65));
     } else if (style === "pixel") {
       const PX = Math.floor(X) + 0.5, PY = Math.floor(Y) + 0.5, pa = angs[si], pc = Math.cos(pa), ps = Math.sin(pa);
-      const pd = SH.sd(pc * (PX - cx) + ps * (PY - 11), -ps * (PX - cx) + pc * (PY - 11), hs, hb.round), pb = hbBarSD(hb.barShape, PX, PY, pd, fw);
+      const pdx = PX - cx - kS * (PY - 11), pd = SH.sd(pc * pdx + ps * (PY - 11), -ps * pdx + pc * (PY - 11), hs, hb.round), pb = hbBarSD(hb.barShape, PX, PY, pd, fw);
       const shine = Math.floor(fract(t) * 46) * 4 - 2;                               // a stepped light column
       if (pd < 0) over(p, hb.slotA, pd > -1 ? scale3(slotC, 2.2) : slotC);
       else if (pb <= 0) { let c = pb > -1 ? scale3(unhex(hb.c1), 0.5) : pd < 1 ? mixc(unhex(hb.c3), WHITE, 0.3) : PY < 3 ? unhex(hb.c3) : PY > 19 ? unhex(hb.c1) : unhex(hb.c2);
@@ -308,14 +326,15 @@ function hotbarSelIcon(S, hb, t) {
   const img = newImg(S, 24, 24), W = img.W, H = img.H, cov = covf(S), P = hbPalette(hb), style = hbSelStyle(hb);
   const buf = style === "frame" ? hbGalaxy(S, 24, 24, t, hb, P, 23) : null, R = Object.assign(clone(HB_RB_BASE), hb.rb || {});
   const col = hb.style === "celestial" && hb.selStyle === "auto" ? unhex(hb.goldCol) : unhex(hb.selCol), acc = unhex(hb.accent);
-  const shape = HB_SHAPES[hb.slotShape] ? hb.slotShape : "square", SH = HB_SHAPES[shape], spin = Math.round(+hb.spin || 0);
-  const a = (+hb.rot || 0) * Math.PI / 180 + (SH.sym ? spin * TAU * t / SH.sym : spin * TAU * t), ca = Math.cos(a), sa = Math.sin(a);
-  const e1 = spin ? [shapeR(shape), shapeR(shape)] : shapeExt(shape, 1, a), ef = Math.max(e1[0], e1[1]);
+  // the frame follows the slots' turn where every slot shares it (same, alternate, rock, spin); otherwise it only takes the spin
+  const G = hbSlotGeo(hb, t), shape = G.shape, SH = G.SH, spin = Math.round(+hb.spin || 0), kS = G.k;
+  const a = ["same", "alternate", "rock"].includes(G.mode) ? G.angs[0] : G.spinA, ca = Math.cos(a), sa = Math.sin(a);
+  const e1 = spin || G.mode === "rock" ? [shapeR(shape, kS), shapeR(shape, kS)] : shapeExt(shape, 1, a, kS), ef = Math.max(e1[0], e1[1]);
   const ho = 11.8 / ef, hh = Math.max(ho * 0.55, ho - hb.selW / ef), hm = (ho + hh) / 2, roundK = hb.round;
   const pulse = 1 + hb.pulse * 0.4 * Math.sin(TAU * 2 * t), squareish = shape === "square";
   for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
     const k = j * W + i, X = (i + 0.5) / S, Y = (j + 0.5) / S, p = px0();
-    const lx = ca * (X - 12) + sa * (Y - 12), ly = -sa * (X - 12) + ca * (Y - 12);
+    const dx = X - 12 - kS * (Y - 12), lx = ca * dx + sa * (Y - 12), ly = -sa * dx + ca * (Y - 12);
     const dO = SH.sd(lx, ly, ho, roundK), dH = SH.sd(lx, ly, hh, roundK);
     const ring = cov(dO) * (1 - cov(dH));
     if (style === "frame") {
@@ -332,7 +351,7 @@ function hotbarSelIcon(S, hb, t) {
       over(p, (1 - cov(dO + 0.4)) * 0.6 * cov(dO), scale3(col, 0.5));
     } else if (style === "corners") {
       // corners follow the spin only on four-fold shapes; others keep them still so the loop matches up
-      const ac = SH.sym === 4 ? a : (+hb.rot || 0) * Math.PI / 180, cx2 = Math.cos(ac) * (X - 12) + Math.sin(ac) * (Y - 12), cy2 = -Math.sin(ac) * (X - 12) + Math.cos(ac) * (Y - 12);
+      const ac = SH.sym === 4 ? a : (+hb.rot || 0) * Math.PI / 180, sx2 = X - 12 - kS * (Y - 12), cx2 = Math.cos(ac) * sx2 + Math.sin(ac) * (Y - 12), cy2 = -Math.sin(ac) * sx2 + Math.cos(ac) * (Y - 12);
       const L = (5 + 1.2 * hb.pulse * Math.sin(TAU * 2 * t)) / ef, m2 = Math.min(Math.abs(cx2), Math.abs(cy2)), near = m2 > ho - L ? 1 : 0;
       over(p, ring * near * cov(-(m2 - (ho - L))), mixc(col, WHITE, 0.2));
       over(p, ring * near * Math.exp(-Math.abs(dH) / 0.25) * hb.selGlow, WHITE);
@@ -412,4 +431,40 @@ function buildWidgets(S, hb) {
     () => { put(hbButtonIcon(S, hb, "normal", 20, 20, "globe"), 0, 106); put(hbButtonIcon(S, hb, "hover", 20, 20, "globe"), 0, 126); },
     () => { for (const [lk, x] of [[true, 0], [false, 20]]) for (const [stt, y] of [["normal", 146], ["hover", 166], ["disabled", 186]]) put(hbButtonIcon(S, hb, stt, 20, 20, "lock", lk), x, y); },
   ] };
+}
+/* complete hotbar designs: a style, variant, shape, bar, turn and size pattern together */
+const HB_DESIGNS = {
+  cosmic: { label: "Cosmic classic", gal: "deep", set: { style: "galaxy" } },
+  cards: { label: "Tilted cards", gal: "andromeda", set: { style: "galaxy", barShape: "tiles", rot: 10, rotMode: "alternate", round: 0.2 } },
+  fan: { label: "Fanned deck", gal: "twilight", set: { style: "galaxy", barShape: "tiles", rot: 20, rotMode: "fan", round: 0.15 } },
+  hive: { label: "Hex hive", gal: "emerald", set: { style: "nebula", slotShape: "hex", barShape: "tiles", rot: 30 } },
+  starlight: { label: "Swaying stars", gal: "void", set: { style: "constellation", slotShape: "star", rot: 14, rotMode: "wave", barShape: "pill" } },
+  gems: { label: "Spinning gems", set: { style: "crystal", slotShape: "octagon", spin: 1, barShape: "pill", accent: "#8ad8ff" } },
+  candy: { label: "Candy bubbles", rb: "stripes", set: { style: "rainbow", slotShape: "circle", barShape: "pill", sizeMode: "alternate" } },
+  arcade: { label: "Neon slant", rb: "neon", set: { style: "rainbow", round: 0.3, skew: 0.3, barShape: "slant" } },
+  forge: { label: "Molten shields", set: { style: "lava", slotShape: "shield", barShape: "chamfer" } },
+  prism: { label: "Rocking prisms", rb: "prism", set: { style: "rainbow", slotShape: "diamond", rot: 18, rotMode: "rock", barShape: "rounded" } },
+  retro: { label: "Retro plus", set: { style: "pixel", slotShape: "plus", c1: "#1a1446", c2: "#4a3ab0", c3: "#9c8cff" } },
+  float: { label: "Floating rings", set: { style: "minimal", slotShape: "circle", barShape: "tiles", sizeMode: "breathe", accent: "#d8c8ff" } },
+  nova: { label: "Supernova stars", gal: "supernova", set: { style: "galaxy", slotShape: "star", spin: 1, barShape: "notch" } },
+  holo: { label: "Holo pills", rb: "holo", set: { style: "rainbow", round: 0.5, barShape: "pill", skew: 0.2 } },
+  shards: { label: "Frozen shards", gal: "ice", set: { style: "crystal", slotShape: "diamond", rot: 25, rotMode: "random", barShape: "tiles", accent: "#bff0ff" } },
+  gate: { label: "Rift gates", gal: "quasar", set: { style: "rift", slotShape: "hex", rot: 90, barShape: "chamfer" } },
+  crown: { label: "Celestial crests", gal: "deep", set: { style: "celestial", slotShape: "shield", barShape: "rounded", sizeMode: "center" } },
+  ribbon: { label: "Aurora ribbon", rb: "aurora", set: { style: "rainbow", slotShape: "circle", barShape: "scallop", sizeMode: "breathe" } },
+  milky: { label: "Milky slant", gal: "milky", set: { style: "galaxy", skew: 0.35, barShape: "slant" } },
+  chroma: { label: "Chroma bubbles", rb: "chroma", set: { style: "rainbow", slotShape: "circle", barShape: "tiles", sizeMode: "center" } },
+  quasar: { label: "Quasar spin", gal: "quasar", set: { style: "nebula", slotShape: "plus", spin: 1, rotMode: "alternate" } },
+  glasscards: { label: "Scattered glass", set: { style: "glass", barShape: "tiles", rot: 9, rotMode: "random", round: 0.12 } },
+  lavadiamonds: { label: "Lava diamonds", set: { style: "lava", slotShape: "diamond", rot: 15, rotMode: "wave" } },
+  pastel: { label: "Pastel waves", gal: "pastel", set: { style: "nebula", slotShape: "circle", barShape: "scallop", sizeMode: "alternate" } },
+};
+const HB_DESIGN_KEEP = ["enabled", "speed", "loopSec", "animFps", "motion", "buttons", "selCol"];
+function hbDesign(cur, name) {
+  const D = HB_DESIGNS[name], hb = clone(HB_DEFAULTS);
+  for (const k of HB_DESIGN_KEEP) if (cur && cur[k] !== undefined) hb[k] = cur[k];
+  if (D.gal) { const v = HB_GAL_VARIANTS[D.gal]; Object.assign(hb, { c1: v.c[0], c2: v.c[1], c3: v.c[2], accent: v.c[3], gal: galParams(D.gal) }, v.o); }
+  if (D.rb) hb.rb = rbParams(D.rb);
+  Object.assign(hb, clone(D.set), { design: name, enabled: true });
+  return hb;
 }
