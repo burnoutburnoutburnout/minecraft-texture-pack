@@ -2837,6 +2837,36 @@ const HB_DESIGNS = {
   glasscards: { label: "Scattered glass", set: { style: "glass", barShape: "tiles", rot: 9, rotMode: "random", round: 0.12 } },
   lavadiamonds: { label: "Lava diamonds", set: { style: "lava", slotShape: "diamond", rot: 15, rotMode: "wave" } },
   pastel: { label: "Pastel waves", gal: "pastel", set: { style: "nebula", slotShape: "circle", barShape: "scallop", sizeMode: "alternate" } },
+  emeraldfan: { label: "Emerald fan", gal: "emerald", set: { style: "nebula", slotShape: "octagon", barShape: "tiles", rot: 25, rotMode: "fan", sizeMode: "center" } },
+  blades: { label: "Crimson blades", gal: "crimson", set: { style: "rift", slotShape: "diamond", skew: 0.45, barShape: "slant" } },
+  sunset: { label: "Sunset pills", gal: "twilight", set: { style: "galaxy", round: 0.5, barShape: "pill", sizeMode: "alternate" } },
+  storm: { label: "Star storm tiles", gal: "starstorm", set: { style: "galaxy", slotShape: "star", barShape: "tiles", rot: 18, rotMode: "alternate" } },
+  pastelplus: { label: "Pastel crosses", rb: "pastel", set: { style: "rainbow", slotShape: "plus", barShape: "scallop", rot: 12, rotMode: "rock" } },
+  orbits: { label: "Void orbits", gal: "void", set: { style: "constellation", slotShape: "circle", barShape: "pill", selStyle: "orbit", orbit: 3 } },
+  neonhex: { label: "Cyan hex grid", set: { style: "neon", slotShape: "hex", rot: 30, barShape: "tiles", accent: "#5af0ff", c2: "#2a6ad8", c3: "#7ef6ff" } },
+  golddiam: { label: "Golden diamonds", set: { style: "celestial", slotShape: "diamond", barShape: "chamfer", sizeMode: "ends" } },
+  icespin: { label: "Ice spinners", gal: "ice", set: { style: "crystal", round: 0.2, spin: -1, barShape: "tiles", accent: "#bff0ff" } },
+  deepcards: { label: "Deep rainbow cards", rb: "dark", set: { style: "rainbow", barShape: "tiles", rot: 14, rotMode: "random" } },
+  wavecandy: { label: "Candy wave", rb: "stripes", set: { style: "rainbow", slotShape: "diamond", rot: 20, rotMode: "wave", barShape: "pill" } },
+  holoshield: { label: "Holo shields", rb: "holo", set: { style: "rainbow", slotShape: "shield", barShape: "notch" } },
+  pixelstar: { label: "Pixel sunset stars", set: { style: "pixel", slotShape: "star", c1: "#3a1404", c2: "#b0501a", c3: "#ffc070", accent: "#ffb060" } },
+  mindiam: { label: "Minimal diamonds", set: { style: "minimal", slotShape: "diamond", barShape: "tiles", sizeMode: "alternate", accent: "#ffffff" } },
+  riftspin: { label: "Rift spinners", gal: "void", set: { style: "rift", slotShape: "plus", spin: 1, barShape: "chamfer", accent: "#b46cff" } },
+  glassbub: { label: "Glass bubbles", set: { style: "glass", slotShape: "circle", barShape: "tiles", sizeMode: "breathe" } },
+  lavarings: { label: "Lava rings", set: { style: "lava", slotShape: "circle", barShape: "scallop", sizeMode: "breathe" } },
+  andslant: { label: "Andromeda slant", gal: "andromeda", set: { style: "galaxy", slotShape: "hex", skew: 0.3, barShape: "slant" } },
+  aurorastar: { label: "Aurora spinning stars", rb: "aurora", set: { style: "rainbow", slotShape: "star", spin: 1, barShape: "pill" } },
+  milkyfan: { label: "Milky Way shields", gal: "milky", set: { style: "nebula", slotShape: "shield", rot: 22, rotMode: "fan", barShape: "tiles" } },
+  quasardiam: { label: "Quasar rockers", gal: "quasar", set: { style: "galaxy", slotShape: "diamond", rot: 20, rotMode: "rock", barShape: "notch", sizeMode: "center" } },
+  prismoct: { label: "Prism octagons", rb: "prism", set: { style: "rainbow", slotShape: "octagon", rot: 22.5, rotMode: "alternate", barShape: "tiles" } },
+  stonetilt: { label: "Tumbled stone", set: { style: "stone", barShape: "tiles", rot: 8, rotMode: "random", round: 0.1 } },
+  redcrest: { label: "Red giant crests", gal: "crimson", set: { style: "celestial", slotShape: "shield", barShape: "rounded", rot: 10, rotMode: "rock", goldCol: "#f0c070" } },
+  galpulse: { label: "Rainbow galaxy pulse", rb: "galaxy", set: { style: "rainbow", slotShape: "circle", barShape: "pill", sizeMode: "breathe" } },
+  chromadiam: { label: "Chroma slant", rb: "chroma", set: { style: "rainbow", slotShape: "diamond", skew: 0.25, barShape: "tiles" } },
+  cornerslant: { label: "Sharp minimal", set: { style: "minimal", round: 0, skew: 0.2, barShape: "slant", selStyle: "corners", accent: "#e6d8ff" } },
+  novashards: { label: "Supernova shards", gal: "supernova", set: { style: "galaxy", slotShape: "diamond", rot: 30, rotMode: "random", barShape: "tiles" } },
+  emeraldbub: { label: "Emerald bubbles", gal: "emerald", set: { style: "nebula", slotShape: "circle", barShape: "scallop", sizeMode: "alternate", selStyle: "glow" } },
+  twistars: { label: "Twilight star fan", gal: "twilight", set: { style: "galaxy", slotShape: "star", rot: 30, rotMode: "fan", barShape: "tiles", sizeMode: "center" } },
 };
 const HB_DESIGN_KEEP = ["enabled", "speed", "loopSec", "animFps", "motion", "buttons", "selCol"];
 function hbDesign(cur, name) {
@@ -3527,7 +3557,7 @@ function hbWide(hb) {                      // the whole hotbar with the frame on
   return c;
 }
 chipSets["hb-designs"] = { tab: "hotbar", raw: true, wide: true, names: Object.keys(HB_DESIGNS), label: n => HB_DESIGNS[n].label,
-  render: n => hbWide(hbDesign(st.hotbar, n)), pick: n => { st.hotbar = hbDesign(st.hotbar, n); }, sel: () => st.hotbar.design || "" };
+  key: () => JSON.stringify(HB_DESIGN_KEEP.map(k => st.hotbar[k])), render: n => hbWide(hbDesign(st.hotbar, n)), pick: n => { st.hotbar = hbDesign(st.hotbar, n); }, sel: () => st.hotbar.design || "" };
 chipSets["hb-gal"] = { tab: "hotbar", raw: true, names: Object.keys(HB_GAL_VARIANTS), label: n => HB_GAL_VARIANTS[n].label,
   render: n => { const v = HB_GAL_VARIANTS[n], hb = Object.assign(clone(st.hotbar), { c1: v.c[0], c2: v.c[1], c3: v.c[2], accent: v.c[3], gal: galParams(n), selStyle: "auto" }, v.o);
     if (!GAL_STYLES.includes(hb.style)) hb.style = "galaxy"; return hbThumb(hb); },
@@ -3550,18 +3580,31 @@ for (const [set, cfg] of Object.entries(chipSets)) {
     if (cfg.wide) $("chips-" + set).classList.add("wide"); else if (cfg.raw) $("chips-" + set).classList.add("big");
     const s = document.createElement("span"); s.textContent = cfg.label(name); b.appendChild(s);
     b.addEventListener("click", () => { cfg.pick(name); syncInputs(); changed(); });
-    $("chips-" + set).appendChild(b); thumbs.push({ c, tab: cfg.tab, bar: cfg.kind === "bar", raw: !!cfg.raw, draw: () => cfg.render(name) });
+    $("chips-" + set).appendChild(b); thumbs.push({ c, tab: cfg.tab, bar: cfg.kind === "bar", raw: !!cfg.raw, draw: () => cfg.render(name), key: cfg.key || (cfg.tab === "hotbar" ? () => JSON.stringify(st.hotbar) : null) });
   }
 }
+let thumbGen = 0;
+function drawOneThumb(th) {
+  const g = th.c.getContext("2d"); g.clearRect(0, 0, th.c.width, th.c.height);
+  if (th.raw) { g.drawImage(th.draw(), 0, 0); return; }
+  const img = toCanvas(th.draw());
+  if (th.bar) g.drawImage(img, 0, 0, 111, 15, 0, 48, 112, 15);
+  else g.drawImage(img, 2, 2);
+}
+// draws the current tab's thumbnails a few at a time so the page stays responsive; thumbnails whose inputs haven't changed are skipped
 function drawThumbs() {
-  for (const th of thumbs) {
-    if (th.tab !== st.tab) continue;
-    const g = th.c.getContext("2d"); g.clearRect(0, 0, th.c.width, th.c.height);
-    if (th.raw) { g.drawImage(th.draw(), 0, 0); continue; }
-    const img = toCanvas(th.draw());
-    if (th.bar) g.drawImage(img, 0, 0, 111, 15, 0, 48, 112, 15);
-    else g.drawImage(img, 2, 2);
-  }
+  const gen = ++thumbGen, todo = thumbs.filter(th => th.tab === st.tab);
+  const step = () => {
+    if (gen !== thumbGen) return;
+    const t0 = performance.now();
+    while (todo.length && performance.now() - t0 < 24) {
+      const th = todo.shift(), key = th.key ? th.key() : null;
+      if (key !== null && key === th.lastKey) continue;
+      drawOneThumb(th); th.lastKey = key;
+    }
+    if (todo.length) requestAnimationFrame(step);
+  };
+  step();
 }
 /* ---------- small variations of the current steak ---------- */
 /* Shape-only variations: each nudges the current outline a little. Works on the drawn outline;
@@ -3672,14 +3715,24 @@ function buildPreview() {
   HEART_ROW = st.pvHardcore ? "hardcore" : "normal";
   try { buildPreviewInner(); } finally { HEART_ROW = "normal"; }
 }
+let hbGen = 0;
 function buildPreviewInner() {
+  // the hotbar: frame 0 now, the rest in the background (a few per screen frame) so editing stays smooth
+  const hb = st.hotbar, HB = animFrames(hb, "hotbar"), hbN = hbStill(hb) ? 1 : Math.min(HB.n, 36), hbBar = [], hbSel = [];
+  hbBar.push(toCanvas(hotbarIcon(PS / 2, hb, 0))); hbSel.push(toCanvas(hotbarSelIcon(PS / 2, hb, 0)));
+  const gen = ++hbGen;
+  const more = () => { if (gen !== hbGen) return; const t0 = performance.now();
+    while (hbBar.length < hbN && performance.now() - t0 < 20) { const f = hbBar.length; hbSel.push(toCanvas(hotbarSelIcon(PS / 2, hb, f / hbN))); hbBar.push(toCanvas(hotbarIcon(PS / 2, hb, f / hbN))); }
+    if (hbBar.length < hbN) requestAnimationFrame(more); };
+  if (hbN > 1) requestAnimationFrame(more);
+  // everything else is only redrawn when its own settings change (not for hotbar edits)
+  const baseKey = JSON.stringify(Object.assign({}, st, { hotbar: 0, tab: 0, perf: 0 }));
+  if (pv && pv.baseKey === baseKey) { Object.assign(pv, { hbBar, hbSel, hbN, hbOn: hb.enabled }); return; }
   const hearts = [], xp = [];
   HEART_FRAMES = animFrames(st.heart, "heart").n; XP_FRAMES = animFrames(st.xp, "bar").n;
-  const hb = st.hotbar, HB = animFrames(hb, "hotbar"), hbN = hbStill(hb) ? 1 : Math.min(HB.n, 72), hbBar = [], hbSel = [];
-  for (let f = 0; f < hbN; f++) { hbBar.push(toCanvas(hotbarIcon(PS / 2, hb, f / hbN))); hbSel.push(toCanvas(hotbarSelIcon(PS / 2, hb, f / hbN))); }
   for (let f = 0; f < HEART_FRAMES; f++) hearts.push([toCanvas(HRT(PS, f / HEART_FRAMES, "full")), toCanvas(HRT(PS, f / HEART_FRAMES, "half"))]);
   for (let f = 0; f < XP_FRAMES; f++) xp.push(toCanvas(BAR(PS, f / XP_FRAMES, "fill")));
-  pv = { hearts, xp, hbBar, hbSel, hbN, hbOn: hb.enabled, cont: toCanvas(HRT(PS, 0, "container")), xpbg: toCanvas(BAR(PS, 0, "bg")),
+  pv = { baseKey, hearts, xp, hbBar, hbSel, hbN, hbOn: hb.enabled, cont: toCanvas(HRT(PS, 0, "container")), xpbg: toCanvas(BAR(PS, 0, "bg")),
     bossbg: toCanvas(BAR(PS, 0, "bg", st.boss, 8, false)), boss: toCanvas(BAR(PS, 0, "fill", st.boss, 8, false)),
     cross: toCanvas(crosshairIcon(PS, st.cross)), bubble: toCanvas(bubbleIcon(PS, false, st.bubble.col)), pop: toCanvas(bubbleIcon(PS, true, st.bubble.col)),
     steak: toCanvas(steakIcon(PS, st, "full")), steakHalf: toCanvas(steakIcon(PS, st, "half")), steakCont: toCanvas(steakIcon(PS, st, "container")),
@@ -3730,12 +3783,13 @@ function drawHud(now) {
     const hbY = xpY + 7 * g, HBa = animFrames(st.hotbar, "hotbar"), hbp = reduceMotion ? 0 : tick / HBa.dur;
     const hbf = Math.floor(hbp * pv.hbN / HBa.n) % pv.hbN, hba = st.hotbar.animFps === "smooth" ? fract(hbp * pv.hbN / HBa.n) : 0, hbn = (hbf + 1) % pv.hbN;
     if (pv.hbOn) {
-      hctx.drawImage(pv.hbBar[hbf], x0, hbY, 182 * g, 22 * g);
-      if (hba > 0) { hctx.globalAlpha = hba; hctx.drawImage(pv.hbBar[hbn], x0, hbY, 182 * g, 22 * g); hctx.globalAlpha = 1; }
+      const ready = pv.hbBar.length === pv.hbN;                          // still drawing frames: hold frame 0
+      hctx.drawImage(pv.hbBar[ready ? hbf : 0], x0, hbY, 182 * g, 22 * g);
+      if (ready && hba > 0) { hctx.globalAlpha = hba; hctx.drawImage(pv.hbBar[hbn], x0, hbY, 182 * g, 22 * g); hctx.globalAlpha = 1; }
     } else { hctx.fillStyle = "rgba(0,0,0,0.45)"; hctx.fillRect(x0, hbY, 182 * g, 22 * g); }
     for (const s2 of [1, 3]) hctx.drawImage(pv.steak, x0 + (3 + 20 * s2) * g, hbY + 3 * g, 16 * g, 16 * g);
-    if (pv.hbOn) { hctx.drawImage(pv.hbSel[hbf], x0 + (20 - 1) * g, hbY - g, 24 * g, 24 * g);
-      if (hba > 0) { hctx.globalAlpha = hba; hctx.drawImage(pv.hbSel[hbn], x0 + 19 * g, hbY - g, 24 * g, 24 * g); hctx.globalAlpha = 1; } }
+    if (pv.hbOn) { const ready = pv.hbBar.length === pv.hbN; hctx.drawImage(pv.hbSel[ready ? hbf : 0], x0 + (20 - 1) * g, hbY - g, 24 * g, 24 * g);
+      if (ready && hba > 0) { hctx.globalAlpha = hba; hctx.drawImage(pv.hbSel[hbn], x0 + 19 * g, hbY - g, 24 * g, 24 * g); hctx.globalAlpha = 1; } }
     // measured preview frame rate
     fpsN++; if (now - fpsT > 1000) { const fps = Math.round(fpsN * 1000 / (now - fpsT)); fpsN = 0; fpsT = now;
       const smooth = st.heart.animFps === "smooth" || st.xp.animFps === "smooth";
