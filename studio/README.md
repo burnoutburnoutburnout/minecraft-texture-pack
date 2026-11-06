@@ -31,6 +31,7 @@ Edit the files in `src/`, run the script, then publish `studio/galaxy-gui-studio
 | `armor.js` | Cosmic armor: galaxy and rainbow armor in several shapes and finishes |
 | `crosshair.js` | Crosshair parts, presets, fills and animation (1.8.9 draws the crosshair with an inverting blend, so colour is stored multiplied by alpha) |
 | `itemmodels.js` | The 1.8.9 item models (compact copy of `assets/minecraft/models/item` from the 1.8.9 client), used to write item models with a scaled `gui` display for the item size setting |
+| `modjar.js` | The crosshair mod jar (from `mod/`), embedded for the download button. Regenerate it after rebuilding the mod |
 | `png.js` | PNG encoder |
 | `themes.js` | Style list and the mini HUD previews |
 | `tail.js` | Settings, every control card, tabs, previews, saving and loading |

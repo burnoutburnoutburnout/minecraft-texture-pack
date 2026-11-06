@@ -1,0 +1,15 @@
+[
+{
+  "modid": "galaxyguicrosshair",
+  "name": "Galaxy GUI Crosshair",
+  "description": "Draws the crosshair with its real colours instead of inverting whatever is behind it (Minecraft 1.8.9). Made for the Galaxy GUI pack; works with any crosshair texture.",
+  "version": "1.0",
+  "mcversion": "1.8.9",
+  "url": "",
+  "authorList": [],
+  "credits": "",
+  "logoFile": "",
+  "screenshots": [],
+  "dependencies": []
+}
+]

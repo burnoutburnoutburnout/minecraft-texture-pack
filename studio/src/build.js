@@ -124,4 +124,27 @@ for (const key of Object.keys(EDIT)) wireEditor(key);
 wireVariations();
 showTab();
 setTimeout(() => { buildPreview(); drawThumbs(); }, 0);
+/* crosshair mod download, on the Crosshair tab */
+(() => {
+  const card = document.querySelector('section.card[data-tab="crosshair"]'); if (!card) return;
+  const box = document.createElement("div"); box.className = "saves";
+  box.innerHTML = '<p class="group-label">Turn the colour inversion off in game</p>'
+    + '<p class="hint">A resource pack can\'t change how the game blends the crosshair, so this is a small Forge 1.8.9 mod that does: it draws the crosshair from your pack with its real colours. '
+    + 'Put the .jar in <code>.minecraft/mods/</code> (needs Forge for 1.8.9). Untick the preview option above to see what it will look like. '
+    + 'Clients that don\'t load Forge mods have their own crosshair settings instead.</p>';
+  const row = document.createElement("div"); row.className = "export-row";
+  const btn = document.createElement("button"); btn.type = "button"; btn.className = "btn"; btn.textContent = "Download the crosshair mod (.jar)";
+  const msg = document.createElement("p"); msg.className = "status"; msg.setAttribute("role", "status");
+  row.appendChild(btn); box.append(row, msg); card.appendChild(box);
+  btn.addEventListener("click", async () => {
+    if (!downloads) { msg.textContent = "Saving files isn't available in this view. Open the artifact on claude.ai to download it."; msg.className = "status err"; return; }
+    try {
+      const bin = atob(CROSS_MOD_JAR), bytes = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      msg.textContent = "Confirm the download…"; msg.className = "status";
+      await downloads.save({ filename: CROSS_MOD_NAME, data: new Blob([bytes], { type: "application/java-archive" }) });
+      msg.textContent = "Saved " + CROSS_MOD_NAME + "."; msg.className = "status ok";
+    } catch (e) { msg.textContent = e && e.code === "declined" ? "Download cancelled." : "Couldn't save the file: " + (e && e.message || e); msg.className = "status err"; }
+  });
+})();
+
 </script>
