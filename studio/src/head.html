@@ -147,7 +147,7 @@ code { font-family: var(--font-mono); font-size: 0.9em; }
   <div class="studio">
     <section class="preview-col card" aria-label="Preview">
       <h2><span class="dot"></span>Live HUD</h2>
-      <div class="hud-frame"><canvas id="hud" class="fit" width="1600" height="560" aria-label="Animated preview of the whole HUD"></canvas></div>
+      <div class="hud-frame"><canvas id="hud" class="fit" width="1600" height="760" aria-label="Animated preview of the whole HUD"></canvas></div>
       <div class="closeups">
         <div class="closeup"><canvas id="bigHeart" width="360" height="360" aria-label="Heart close-up"></canvas><span class="lbl">Heart</span></div>
         <div class="closeup"><canvas id="bigSteak" width="360" height="360" aria-label="Steak close-up"></canvas><span class="lbl">Steak</span></div>
@@ -195,6 +195,7 @@ code { font-family: var(--font-mono); font-size: 0.9em; }
             <label class="toggle" for="perf-hearts"><input type="checkbox" id="perf-hearts">Animate hearts</label>
             <label class="toggle" for="perf-hc"><input type="checkbox" id="perf-hc">Animate hardcore hearts</label>
             <label class="toggle" for="perf-xp"><input type="checkbox" id="perf-xp">Animate XP bar</label>
+            <label class="toggle" for="perf-hb"><input type="checkbox" id="perf-hb">Animate hotbar</label>
           </div>
           <p class="status" id="perf-est"></p>
         </div>

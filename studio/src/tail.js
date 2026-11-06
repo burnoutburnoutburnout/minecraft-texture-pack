@@ -18,7 +18,8 @@ const DEFAULTS = {
   jump: { c1: "#5a2e06", c2: "#d28818", c3: "#ffe26e" },
   bubble: { col: "#78c8ff", style: "classic", accent: "#ffd27a", size: 1, rim: 1, shine: 1, alpha: 1 },
   cross: { col: "#ffffff", len: 4.5, thick: 1.0 },
-  res: 128, perf: { preset: "light", animHearts: true, animHardcore: true, animXP: true },
+  hotbar: clone(HB_DEFAULTS),
+  res: 128, perf: { preset: "light", animHearts: true, animHardcore: true, animXP: true, animHotbar: true },
 };
 const KEY = "galaxy-gui-studio-v4";
 function deepMerge(base, over) {
@@ -84,7 +85,8 @@ const FPS_OPTIONS = [["1", "20 fps (highest the game allows)"], ["2", "10 fps"],
 const NUM_SELECT = /(\.speed)$/;
 // frames in a loop: frame rate x loop length, capped so the texture stays a sane size (512x XP bars are large)
 function animFrames(el, kind, res = st.res) {
-  const cap = kind === "bar" ? (res >= 512 ? 64 : res >= 256 ? 160 : 240) : 240, loop = Math.max(1, +el.loopSec || 5);
+  const S = res / 16, cap = kind === "hotbar" ? Math.max(6, Math.min(240, Math.floor(40e6 / (182 * 22 * S * S))))
+    : kind === "bar" ? (res >= 512 ? 64 : res >= 256 ? 160 : 240) : 240, loop = Math.max(1, +el.loopSec || 5);
   let dur = Math.max(1, Math.round(+el.speed || 2)), n = Math.round(loop * 20 / dur);
   if (n > cap) { dur = Math.ceil(loop * 20 / cap); n = Math.round(loop * 20 / dur); }
   return { n: Math.max(2, n), dur, fps: 20 / dur, capped: dur !== Math.max(1, Math.round(+el.speed || 2)) };
@@ -231,6 +233,26 @@ const SECTIONS = [
   ...elSections("heart", "heart", "Hearts", ""),
   ...elSections("armor", "armor", "Armor", ""),
   ...elSections("xp", "bar", "XP bar", "xp"),
+  { id: "hb-style", tab: "hotbar", title: "Hotbar style", cls: "", chips: "styles-hotbar",
+    hint: "Replaces the hotbar in textures/gui/widgets.png. That file also holds the menu buttons, so the pack draws matching buttons (pick them below).", groups: [
+    { controls: [TG("hotbar.enabled", "Include the hotbar and buttons in the pack")] }] },
+  { id: "hb-sel", tab: "hotbar", title: "Selected slot frame", cls: "", chips: "styles-hbsel", groups: [
+    { controls: [C("hotbar.selCol", "Frame colour")] },
+    { controls: [R("hotbar.selW", "Frame thickness", 1, 3.7, 0.05), R("hotbar.selGlow", "Glow", 0, 1.5, 0.01), R("hotbar.pulse", "Pulse", 0, 1, 0.01), R("hotbar.orbit", "Orbiting stars", 1, 4, 1)] }] },
+  { id: "hb-look", tab: "hotbar", title: "Hotbar look", cls: "", groups: [
+    { controls: [R("hotbar.slotA", "Slot opacity", 0, 1, 0.01), R("hotbar.railA", "Frame opacity", 0, 1, 0.01), R("hotbar.window", "Slot size", -0.5, 1.4, 0.01),
+      R("hotbar.round", "Rounded slots", 0, 0.5, 0.01), R("hotbar.frameW", "Outline thickness", 0, 1.2, 0.01), R("hotbar.glow", "Glow", 0, 1.5, 0.01),
+      R("hotbar.shine", "Shine and travelling lights", 0, 1.5, 0.01), R("hotbar.stars", "Stars", 0, 3, 0.05), R("hotbar.texScale", "Galaxy size", 0.3, 3, 0.01)] }] },
+  { id: "hb-anim", tab: "hotbar", title: "Hotbar animation", cls: "", groups: [
+    { controls: [SEL("hotbar.speed", "Frame rate (FPS)", FPS_OPTIONS), R("hotbar.loopSec", "Loop length in seconds (longer = slower motion)", 1, 12, 0.1),
+      SEL("hotbar.animFps", "Smoothing", [["ticks", "Off (lightest)"], ["smooth", "Blend frames (smooth, costs FPS)"]]),
+      SEL("hotbar.motion", "Motion", [["random", "Random: wanders, changes speed, shooting stars"], ["loop", "Steady: drifts one way at one speed"]]),
+      R("hotbar.shoot", "Shooting stars per loop (random)", 0, 5, 1), { type: "info", path: "hotbar.fpsInfo", kind: "hotbar" }] }] },
+  { id: "hb-colors", tab: "hotbar", title: "Hotbar colours", cls: "", groups: [
+    { label: "Galaxy", controls: [C("hotbar.c1", "Dark"), C("hotbar.c2", "Main"), C("hotbar.c3", "Highlight")] },
+    { label: "Details", controls: [C("hotbar.accent", "Accent (lines, neon, rift)"), C("hotbar.slotCol", "Slots"), C("hotbar.outlineCol", "Outline"), C("hotbar.goldCol", "Gold (celestial)")] }] },
+  { id: "hb-buttons", tab: "hotbar", title: "Menu buttons", cls: "", chips: "buttons-hb",
+    hint: "The buttons on the title screen, pause menu and settings. The game writes the text on top (yellow when you hover).", groups: [] },
   { id: "bubbles", tab: "other", title: "Air bubbles", chips: [["styles-bubble", "Pick a bubble style"]],
     hint: "Each style has a matching popping bubble for the last bit of air.", groups: [
     { controls: [C("bubble.col", "Colour"), C("bubble.accent", "Accent (planet ring, soap tint)")] },
@@ -242,7 +264,7 @@ const SECTIONS = [
     { controls: [R("cross.len", "Crosshair size", 1.5, 7.5, 0.1), R("cross.thick", "Crosshair thickness", 0.4, 2.5, 0.05)] },
   ] },
 ];
-const TABS = [["themes", "Styles"], ["steak", "Steak"], ["heart", "Hearts"], ["armor", "Armor"], ["xp", "XP bar"], ["other", "Other HUD"]];
+const TABS = [["themes", "Styles"], ["steak", "Steak"], ["heart", "Hearts"], ["armor", "Armor"], ["xp", "XP bar"], ["hotbar", "Hotbar"], ["other", "Other HUD"]];
 const $ = id => document.getElementById(id);
 
 /* ---------- outline editors (steak, hearts, armor) ---------- */
@@ -550,6 +572,20 @@ chipSets["styles-xp"] = { tab: "xp", kind: "bar", names: XP_STYLE_NAMES, label: 
 chipSets["rift-xp"] = { tab: "xp", kind: "bar", names: Object.keys(RIFT_VARIANTS), label: n => RIFT_VARIANTS[n].label,
   render: n => elementIcon("bar", 3, Object.assign(clone(st.xp), { uiStyle: "rift", rift: riftParams(n) }), st.xp, 0.2, "fill"),
   pick: n => { st.xp.uiStyle = "rift"; st.xp.rift = riftParams(n); }, sel: () => st.xp.uiStyle === "rift" ? (st.xp.rift || {}).variant || "classic" : "" };
+function hbThumb(hb) {                     // first slots of the hotbar with the selection frame on slot 1
+  const c = document.createElement("canvas"); c.width = 112; c.height = 112; const g = c.getContext("2d");
+  g.fillStyle = "#4f6b35"; g.fillRect(0, 0, 112, 112);
+  g.drawImage(toCanvas(hotbarIcon(3, hb, 0.2)), -37, 23); g.drawImage(toCanvas(hotbarSelIcon(3, hb, 0.2)), 20, 20);
+  return c;
+}
+chipSets["styles-hotbar"] = { tab: "hotbar", raw: true, names: Object.keys(HOTBAR_STYLES), label: n => HOTBAR_STYLES[n],
+  render: n => hbThumb(Object.assign(clone(st.hotbar), { style: n, selStyle: "auto" })), pick: n => { st.hotbar.style = n; st.hotbar.enabled = true; }, sel: () => st.hotbar.style };
+chipSets["styles-hbsel"] = { tab: "hotbar", raw: true, names: Object.keys(HB_SEL_STYLES), label: n => HB_SEL_STYLES[n],
+  render: n => hbThumb(Object.assign(clone(st.hotbar), { selStyle: n })), pick: n => { st.hotbar.selStyle = n; }, sel: () => st.hotbar.selStyle };
+chipSets["buttons-hb"] = { tab: "hotbar", raw: true, names: Object.keys(HB_BUTTONS), label: n => HB_BUTTONS[n],
+  render: n => { const hb = Object.assign(clone(st.hotbar), { buttons: n }), c = document.createElement("canvas"); c.width = 112; c.height = 112; const g = c.getContext("2d");
+    ["normal", "hover", "disabled"].forEach((s2, k) => g.drawImage(toCanvas(hbButtonIcon(1, hb, s2, 104, 20)), 0, 0, 104, 20, 4, 14 + k * 30, 104, 20)); return c; },
+  pick: n => { st.hotbar.buttons = n; }, sel: () => st.hotbar.buttons };
 const thumbs = [];
 for (const [set, cfg] of Object.entries(chipSets)) {
   for (const name of cfg.names) {
@@ -557,13 +593,14 @@ for (const [set, cfg] of Object.entries(chipSets)) {
     const c = document.createElement("canvas"); c.width = 112; c.height = 112; b.appendChild(c);
     const s = document.createElement("span"); s.textContent = cfg.label(name); b.appendChild(s);
     b.addEventListener("click", () => { cfg.pick(name); syncInputs(); changed(); });
-    $("chips-" + set).appendChild(b); thumbs.push({ c, tab: cfg.tab, bar: cfg.kind === "bar", draw: () => cfg.render(name) });
+    $("chips-" + set).appendChild(b); thumbs.push({ c, tab: cfg.tab, bar: cfg.kind === "bar", raw: !!cfg.raw, draw: () => cfg.render(name) });
   }
 }
 function drawThumbs() {
   for (const th of thumbs) {
     if (th.tab !== st.tab) continue;
     const g = th.c.getContext("2d"); g.clearRect(0, 0, 112, 112);
+    if (th.raw) { g.drawImage(th.draw(), 0, 0); continue; }
     const img = toCanvas(th.draw());
     if (th.bar) g.drawImage(img, 0, 0, 111, 15, 0, 48, 112, 15);
     else g.drawImage(img, 2, 2);
@@ -681,9 +718,11 @@ function buildPreview() {
 function buildPreviewInner() {
   const hearts = [], xp = [];
   HEART_FRAMES = animFrames(st.heart, "heart").n; XP_FRAMES = animFrames(st.xp, "bar").n;
+  const hb = st.hotbar, HB = animFrames(hb, "hotbar"), hbN = hbStill(hb) ? 1 : Math.min(HB.n, 72), hbBar = [], hbSel = [];
+  for (let f = 0; f < hbN; f++) { hbBar.push(toCanvas(hotbarIcon(PS / 2, hb, f / hbN))); hbSel.push(toCanvas(hotbarSelIcon(PS / 2, hb, f / hbN))); }
   for (let f = 0; f < HEART_FRAMES; f++) hearts.push([toCanvas(HRT(PS, f / HEART_FRAMES, "full")), toCanvas(HRT(PS, f / HEART_FRAMES, "half"))]);
   for (let f = 0; f < XP_FRAMES; f++) xp.push(toCanvas(BAR(PS, f / XP_FRAMES, "fill")));
-  pv = { hearts, xp, cont: toCanvas(HRT(PS, 0, "container")), xpbg: toCanvas(BAR(PS, 0, "bg")),
+  pv = { hearts, xp, hbBar, hbSel, hbN, hbOn: hb.enabled, cont: toCanvas(HRT(PS, 0, "container")), xpbg: toCanvas(BAR(PS, 0, "bg")),
     bossbg: toCanvas(BAR(PS, 0, "bg", st.boss, 8, false)), boss: toCanvas(BAR(PS, 0, "fill", st.boss, 8, false)),
     cross: toCanvas(crosshairIcon(PS, st.cross)), bubble: toCanvas(bubbleIcon(PS, false, st.bubble.col)), pop: toCanvas(bubbleIcon(PS, true, st.bubble.col)),
     steak: toCanvas(steakIcon(PS, st, "full")), steakHalf: toCanvas(steakIcon(PS, st, "half")), steakCont: toCanvas(steakIcon(PS, st, "container")),
@@ -700,10 +739,10 @@ function buildPreviewInner() {
 }
 const hud = $("hud"), hctx = hud.getContext("2d");
 const ground = (() => {
-  const c = document.createElement("canvas"); c.width = 1600; c.height = 560; const g = c.getContext("2d");
-  const grad = g.createLinearGradient(0, 0, 0, 560); grad.addColorStop(0, "#6b8c4a"); grad.addColorStop(1, "#43602c");
-  g.fillStyle = grad; g.fillRect(0, 0, 1600, 560);
-  const r = mulberry32(5); for (let i = 0; i < 3600; i++) { g.fillStyle = r() < 0.5 ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.07)"; g.fillRect(r() * 1600, r() * 560, 4 + r() * 10, 4 + r() * 10); }
+  const c = document.createElement("canvas"); c.width = 1600; c.height = 760; const g = c.getContext("2d");
+  const grad = g.createLinearGradient(0, 0, 0, 760); grad.addColorStop(0, "#6b8c4a"); grad.addColorStop(1, "#43602c");
+  g.fillStyle = grad; g.fillRect(0, 0, 1600, 760);
+  const r = mulberry32(5); for (let i = 0; i < 4800; i++) { g.fillStyle = r() < 0.5 ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.07)"; g.fillRect(r() * 1600, r() * 760, 4 + r() * 10, 4 + r() * 10); }
   return c;
 })();
 const reduceMotion = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -730,6 +769,16 @@ function drawHud(now) {
     hctx.drawImage(pv.xpbg, x0, xpY);
     const fw = Math.round(182 * 0.72 * PS); hctx.drawImage(pv.xp[xf], 0, 0, fw, 5 * PS, x0, xpY, fw * g / PS, 5 * g);
     if (xa > 0) { hctx.globalAlpha = xa; hctx.drawImage(pv.xp[xn], 0, 0, fw, 5 * PS, x0, xpY, fw * g / PS, 5 * g); hctx.globalAlpha = 1; }
+    // hotbar (7 base px below the XP bar), selection frame on slot 2 holding steak
+    const hbY = xpY + 7 * g, HBa = animFrames(st.hotbar, "hotbar"), hbp = reduceMotion ? 0 : tick / HBa.dur;
+    const hbf = Math.floor(hbp * pv.hbN / HBa.n) % pv.hbN, hba = st.hotbar.animFps === "smooth" ? fract(hbp * pv.hbN / HBa.n) : 0, hbn = (hbf + 1) % pv.hbN;
+    if (pv.hbOn) {
+      hctx.drawImage(pv.hbBar[hbf], x0, hbY, 182 * g, 22 * g);
+      if (hba > 0) { hctx.globalAlpha = hba; hctx.drawImage(pv.hbBar[hbn], x0, hbY, 182 * g, 22 * g); hctx.globalAlpha = 1; }
+    } else { hctx.fillStyle = "rgba(0,0,0,0.45)"; hctx.fillRect(x0, hbY, 182 * g, 22 * g); }
+    for (const s2 of [1, 3]) hctx.drawImage(pv.steak, x0 + (3 + 20 * s2) * g, hbY + 3 * g, 16 * g, 16 * g);
+    if (pv.hbOn) { hctx.drawImage(pv.hbSel[hbf], x0 + (20 - 1) * g, hbY - g, 24 * g, 24 * g);
+      if (hba > 0) { hctx.globalAlpha = hba; hctx.drawImage(pv.hbSel[hbn], x0 + 19 * g, hbY - g, 24 * g, 24 * g); hctx.globalAlpha = 1; } }
     // measured preview frame rate
     fpsN++; if (now - fpsT > 1000) { const fps = Math.round(fpsN * 1000 / (now - fpsT)); fpsN = 0; fpsT = now;
       const smooth = st.heart.animFps === "smooth" || st.xp.animFps === "smooth";
@@ -767,18 +816,19 @@ function fallbackCopy(text) {
 // second; interpolated ("Smooth") ones are blended on the CPU on every rendered frame, which is what costs FPS.
 function perfEstimate(fps = 240) {
   const S = st.res / 16, pf = st.perf, rate = (el, kind) => el.animFps === "smooth" ? fps : animFrames(el, kind).fps;
-  const aH = pf.animHearts, aHC = aH && pf.animHardcore, aX = pf.animXP;
-  const heartPx = 18 * S * 9 * S, xpPx = 182 * S * 5 * S;
-  return ((aH ? heartPx * rate(st.heart, "heart") : 0) + (aHC ? heartPx * rate(st.heart, "heart") : 0) + (aX ? xpPx * rate(st.xp, "bar") : 0)) / 1e6;
+  const aH = pf.animHearts, aHC = aH && pf.animHardcore, aX = pf.animXP, aB = pf.animHotbar && st.hotbar.enabled && !hbStill(st.hotbar);
+  const heartPx = 18 * S * 9 * S, xpPx = 182 * S * 5 * S, hbPx = (182 * 22 + 24 * 24) * S * S;
+  return ((aH ? heartPx * rate(st.heart, "heart") : 0) + (aHC ? heartPx * rate(st.heart, "heart") : 0) + (aX ? xpPx * rate(st.xp, "bar") : 0)
+    + (aB ? hbPx * rate(st.hotbar, "hotbar") : 0)) / 1e6;
 }
 function syncPerf() {
-  const pf = st.perf, allOn = pf.animHearts && pf.animHardcore && pf.animXP;
-  const sm = st.heart.animFps === "smooth" && st.xp.animFps === "smooth", stp = st.heart.animFps === "ticks" && st.xp.animFps === "ticks";
-  const noneOn = !pf.animHearts && !pf.animXP;
+  const pf = st.perf, allOn = pf.animHearts && pf.animHardcore && pf.animXP && pf.animHotbar;
+  const sm = st.heart.animFps === "smooth" && st.xp.animFps === "smooth" && st.hotbar.animFps === "smooth", stp = st.heart.animFps === "ticks" && st.xp.animFps === "ticks";
+  const noneOn = !pf.animHearts && !pf.animXP && !pf.animHotbar;
   pf.preset = noneOn ? (st.res <= 128 ? "none" : "custom") : !allOn ? "custom" : sm ? "smooth"
-    : stp && st.res <= 128 && +st.heart.speed >= 2 && +st.xp.speed >= 2 ? "light" : stp ? "balanced" : "custom";
+    : stp && st.hotbar.animFps !== "smooth" && st.res <= 128 && +st.heart.speed >= 2 && +st.xp.speed >= 2 && +st.hotbar.speed >= 2 ? "light" : stp ? "balanced" : "custom";
   $("perf-preset").value = pf.preset;
-  $("perf-hearts").checked = pf.animHearts; $("perf-hc").checked = pf.animHardcore; $("perf-xp").checked = pf.animXP;
+  $("perf-hearts").checked = pf.animHearts; $("perf-hc").checked = pf.animHardcore; $("perf-xp").checked = pf.animXP; $("perf-hb").checked = pf.animHotbar;
   $("perf-hc").disabled = !pf.animHearts;
   const m = perfEstimate(), smooth = st.heart.animFps === "smooth" || st.xp.animFps === "smooth";
   const level = m < 8 ? ["Light", "ok"] : m < 40 ? ["Moderate", ""] : ["Heavy: likely to lower your FPS", "err"];
@@ -791,14 +841,15 @@ function syncPerf() {
 }
 function applyPerfPreset(p) {
   const pf = st.perf; pf.preset = p;
-  if (p === "none") { st.res = 128; Object.assign(pf, { animHearts: false, animHardcore: false, animXP: false }); }
+  const allAnim = { animHearts: true, animHardcore: true, animXP: true, animHotbar: true };
+  if (p === "none") { st.res = 128; Object.assign(pf, { animHearts: false, animHardcore: false, animXP: false, animHotbar: false }); }
   if (p === "light") { st.res = 128; st.heart.animFps = "ticks"; st.xp.animFps = "ticks"; st.heart.speed = Math.max(2, +st.heart.speed); st.xp.speed = Math.max(2, +st.xp.speed);
-    Object.assign(pf, { animHearts: true, animHardcore: true, animXP: true }); }
-  if (p === "balanced") { st.heart.animFps = "ticks"; st.xp.animFps = "ticks"; Object.assign(pf, { animHearts: true, animHardcore: true, animXP: true }); }
-  if (p === "smooth") { st.heart.animFps = "smooth"; st.xp.animFps = "smooth"; Object.assign(pf, { animHearts: true, animHardcore: true, animXP: true }); }
+    st.hotbar.animFps = "ticks"; st.hotbar.speed = Math.max(2, +st.hotbar.speed); Object.assign(pf, allAnim); }
+  if (p === "balanced") { st.heart.animFps = "ticks"; st.xp.animFps = "ticks"; st.hotbar.animFps = "ticks"; Object.assign(pf, allAnim); }
+  if (p === "smooth") { st.heart.animFps = "smooth"; st.xp.animFps = "smooth"; st.hotbar.animFps = "smooth"; Object.assign(pf, allAnim); }
 }
 $("perf-preset").addEventListener("change", () => { applyPerfPreset($("perf-preset").value); syncInputs(); changed(); });
-for (const [id, key] of [["perf-hearts", "animHearts"], ["perf-hc", "animHardcore"], ["perf-xp", "animXP"]])
+for (const [id, key] of [["perf-hearts", "animHearts"], ["perf-hc", "animHardcore"], ["perf-xp", "animXP"], ["perf-hb", "animHotbar"]])
   $(id).addEventListener("change", () => { st.perf[key] = $(id).checked; st.perf.preset = "custom"; syncInputs(); save(); });
 
 /* ---------- saved setups ---------- */

@@ -46,6 +46,13 @@ async function buildPack(progress) {
   const xw = 182 * S, xh = 5 * S, xp = new Uint8ClampedArray(xw * xh * XP_FRAMES * 4);
   if (aX) for (let f = 0; f < XP_FRAMES; f++) jobs.push(() => xp.set(BAR(S, f / XP_FRAMES, "fill").data, f * xw * xh * 4));
 
+  // hotbar, selection frame and buttons (textures/gui/widgets.png) plus their animation strips
+  const hb = st.hotbar, hbOn = hb && hb.enabled !== false, aB = hbOn && pf.animHotbar !== false && !hbStill(hb), BA = animFrames(hb, "hotbar", st.res);
+  const WG = hbOn ? buildWidgets(S, hb) : null;
+  if (WG) jobs.push(...WG.jobs);
+  const bw = 182 * S, bh = 22 * S, sw = 24 * S, hbStrip = aB ? new Uint8ClampedArray(bw * bh * BA.n * 4) : null, selStrip = aB ? new Uint8ClampedArray(sw * sw * BA.n * 4) : null;
+  if (aB) for (let f = 0; f < BA.n; f++) jobs.push(() => { hbStrip.set(hotbarIcon(S, hb, f / BA.n).data, f * bw * bh * 4); selStrip.set(hotbarSelIcon(S, hb, f / BA.n).data, f * sw * sw * 4); });
+
   const total = jobs.length + 4;
   for (let i = 0; i < jobs.length; i++) { jobs[i](); progress((i + 1) / total, "Drawing textures…"); await pause(); }
 
@@ -61,6 +68,8 @@ async function buildPack(progress) {
   if (hcSeparate) zip.file(anim + "hearts_hardcore.png", encodePNG(heartsHC, hw, hh * HEART_FRAMES));
   progress((jobs.length + 3) / total, "Compressing XP animation…"); await pause();
   if (aX) zip.file(anim + "xp.png", encodePNG(xp, xw, xh * XP_FRAMES));
+  if (WG) zip.file("assets/minecraft/textures/gui/widgets.png", encodePNG(WG.out, WG.Wd, WG.Wd));
+  if (aB) { zip.file(anim + "hotbar.png", encodePNG(hbStrip, bw, bh * BA.n)); zip.file(anim + "hotbar_sel.png", encodePNG(selStrip, sw, sw * BA.n)); }
   // interpolate=true (OptiFine 1.8.9 HD U L5 or newer) blends frames on every rendered frame instead of stepping each tick
   const props = (src, x, y, w, h, dur, smooth) => `from=./${src}\nto=textures/gui/icons.png\nx=${x}\ny=${y}\nw=${w}\nh=${h}\nduration=${dur}\n`
     + (smooth ? "interpolate=true\n" : "");
@@ -68,6 +77,10 @@ async function buildPack(progress) {
   if (aH) zip.file(anim + "hearts.properties", props("hearts.png", 52 * S, 0, 18 * S, 9 * S, HA.dur, st.heart.animFps === "smooth"));
   if (aHC) zip.file(anim + "hearts_hardcore.properties", props(hcSeparate ? "hearts_hardcore.png" : "hearts.png", 52 * S, 45 * S, 18 * S, 9 * S, HA.dur, st.heart.animFps === "smooth"));
   if (aX) zip.file(anim + "xp.properties", props("xp.png", 0, 69 * S, 182 * S, 5 * S, XA.dur, st.xp.animFps === "smooth"));
+  if (aB) {
+    zip.file(anim + "hotbar.properties", props("hotbar.png", 0, 0, bw, bh, BA.dur, hb.animFps === "smooth").replace("textures/gui/icons.png", "textures/gui/widgets.png"));
+    zip.file(anim + "hotbar_sel.properties", props("hotbar_sel.png", 0, 22 * S, sw, sw, BA.dur, hb.animFps === "smooth").replace("textures/gui/icons.png", "textures/gui/widgets.png"));
+  }
   progress(1, "Zipping…"); await pause();
   return zip.generateAsync({ type: "blob", compression: "STORE" });
 }
