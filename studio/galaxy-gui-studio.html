@@ -4496,22 +4496,48 @@ function crossFramesRGBA(S, n) {                                // n frames, col
   for (let k = 0; k < n; k++) f.push(crosshairIcon(S, st.cross, n > 1 ? k / n : 0).data);
   return f;
 }
-function crossOnlyPackBlob(baseRes) {
-  const S = baseRes / 16, cw = 16 * S, A = crossAnimated(st.cross) ? animFrames(st.cross, "cross", baseRes) : { n: 2, dur: 1000 };
-  const frames = crossFramesRGBA(S, crossAnimated(st.cross) ? A.n : 1), n = crossAnimated(st.cross) ? A.n : 2;
-  const strip = new Uint8ClampedArray(cw * cw * n * 4);
-  for (let k = 0; k < n; k++) strip.set(frames[Math.min(k, frames.length - 1)], k * cw * cw * 4);
+/* OptiFine only runs an animation whose target texture comes from the same pack, so the crosshair-only pack carries its
+   own icons.png: the one the player already uses (from their other pack, an icons.png, or Minecraft's 1.8.9.jar),
+   with this crosshair painted into its top-left 16 x 16 and everything else left exactly as it was. */
+let crossBase = null;                                           // { data, w, h, from }
+async function loadCrossBase(file) {
+  let blob = file, from = file.name;
+  if (!/\.png$/i.test(file.name)) {
+    const z = await JSZip.loadAsync(file);
+    const path = Object.keys(z.files).find(n => n.toLowerCase().replace(/\\/g, "/").endsWith("assets/minecraft/textures/gui/icons.png"));
+    if (!path) throw new Error("There's no icons.png in " + file.name + " (assets/minecraft/textures/gui/icons.png). If that pack doesn't change the icons, choose Minecraft's 1.8.9.jar instead.");
+    blob = await z.file(path).async("blob"); from = file.name;
+  }
+  const bm = await createImageBitmap(blob), c = document.createElement("canvas"); c.width = bm.width; c.height = bm.height;
+  const g = c.getContext("2d"); g.drawImage(bm, 0, 0);
+  if (bm.width !== bm.height || bm.width % 256 !== 0) throw new Error(`That icons.png is ${bm.width} × ${bm.height}; it should be square and 256, 512, 1024… pixels wide.`);
+  crossBase = { data: g.getImageData(0, 0, bm.width, bm.height).data, w: bm.width, h: bm.height, from };
+  return crossBase;
+}
+function crossOnlyPackBlob(detail) {
+  // a low-res base is blown up by a whole number with copied pixels (looks exactly the same) so the crosshair can be sharp
+  let base = crossBase; const k = Math.max(1, Math.floor((detail || 0) * 16 / base.w));
+  if (k > 1) { const W = base.w * k, d = new Uint8ClampedArray(W * W * 4), s = base.data;
+    for (let y = 0; y < W; y++) { const sy = Math.floor(y / k); for (let x = 0; x < W; x++) { const q = (sy * base.w + Math.floor(x / k)) * 4, o = (y * W + x) * 4; d[o] = s[q]; d[o + 1] = s[q + 1]; d[o + 2] = s[q + 2]; d[o + 3] = s[q + 3]; } }
+    base = { data: d, w: W, h: W, from: base.from }; }
+  const S = base.w / 256, cw = 16 * S, anim = crossAnimated(st.cross);
+  const A = anim ? animFrames(st.cross, "cross", base.w / 16) : { n: 1, dur: 1 };
+  let strip = new Uint8ClampedArray(cw * cw * A.n * 4);
+  crossFramesRGBA(S, A.n).forEach((fr, k) => strip.set(fr, k * cw * cw * 4));
   const g = +st.guiMatch || 0, f = g > 0 ? S / g : 0;
-  let out = strip;
-  if (f > 1.001) { out = hudFilter(strip, cw, cw * n, f); for (let q = 0; q < out.length; q += 4) { const a = out[q + 3] / 255; out[q] *= a; out[q + 1] *= a; out[q + 2] *= a; } }
+  if (f > 1.001) { strip = hudFilter(strip, cw, cw * A.n, f); for (let q = 0; q < strip.length; q += 4) { const a = strip[q + 3] / 255; strip[q] *= a; strip[q + 1] *= a; strip[q + 2] *= a; } }
+  const icons = new Uint8ClampedArray(base.data);               // the player's icons, crosshair area replaced
+  for (let y = 0; y < cw; y++) icons.set(strip.subarray(y * cw * 4, (y + 1) * cw * 4), y * base.w * 4);
   const zip = new JSZip(), dir = "assets/minecraft/mcpatcher/anim/galaxyguicross/";
-  zip.file("pack.mcmeta", JSON.stringify({ pack: { pack_format: 1, description: "§dGalaxy GUI crosshair\n§8Needs OptiFine. Put it above your other pack." } }, null, 2));
+  zip.file("pack.mcmeta", JSON.stringify({ pack: { pack_format: 1, description: "§dGalaxy GUI crosshair\n§8On the icons from " + base.from.slice(0, 40) } }, null, 2));
   const icon = document.createElement("canvas"); icon.width = 128; icon.height = 128; const ig = icon.getContext("2d");
   ig.fillStyle = "#2a2440"; ig.fillRect(0, 0, 128, 128); ig.drawImage(toCanvas(crosshairIcon(7, st.cross, 0.15)), 8, 8);
-  const pk = ig.getImageData(0, 0, 128, 128).data;
-  zip.file("pack.png", encodePNG(pk, 128, 128));
-  zip.file(dir + "crosshair.png", encodePNG(out, cw, cw * n));
-  zip.file(dir + "crosshair.properties", `from=./crosshair.png\nto=textures/gui/icons.png\nx=0\ny=0\nw=${cw}\nh=${cw}\nduration=${A.dur}\n` + (crossAnimated(st.cross) && st.cross.animFps === "smooth" ? "interpolate=true\n" : ""));
+  zip.file("pack.png", encodePNG(ig.getImageData(0, 0, 128, 128).data, 128, 128));
+  zip.file("assets/minecraft/textures/gui/icons.png", encodePNG(icons, base.w, base.h));
+  if (anim) {                                                    // animated: OptiFine animation onto this pack's own icons.png
+    zip.file(dir + "crosshair.png", encodePNG(strip, cw, cw * A.n));
+    zip.file(dir + "crosshair.properties", `from=./crosshair.png\nto=textures/gui/icons.png\nx=0\ny=0\nw=${cw}\nh=${cw}\nduration=${A.dur}\n` + (st.cross.animFps === "smooth" ? "interpolate=true\n" : ""));
+  }
   return zip.generateAsync({ type: "blob", compression: "DEFLATE" });
 }
 function crossPngBlob(px) {                                     // true colours on transparent, px x px
@@ -4523,19 +4549,20 @@ function crossPngBlob(px) {                                     // true colours 
   const card = document.querySelector('section.card[data-tab="crosshair"]'); if (!card) return;
   const box = document.createElement("div"); box.className = "saves";
   box.innerHTML = '<p class="group-label">Export just the crosshair</p>'
-    + '<p class="hint"><b>Crosshair-only pack:</b> a tiny pack that paints this crosshair onto the icons of whatever pack is below it (or vanilla), leaving its hearts and everything else alone. '
-    + 'Needs OptiFine; put it above the other pack in your list, and pick that pack\'s resolution so the crosshair lands in the right place. '
+    + '<p class="hint"><b>Crosshair-only pack:</b> your crosshair on top of another pack (or vanilla) without touching its hearts and other icons. '
+    + 'Choose the icons it should go on: <b>your other pack\'s .zip</b>, an <b>icons.png</b>, or for vanilla icons <b>Minecraft\'s 1.8.9.jar</b> (in <code>.minecraft/versions/1.8.9/</code>). '
+    + 'The file stays in your browser. Put the new pack above the other one in your list. Works without OptiFine (animated crosshairs need it). If those icons are low-res, the pack copies each of their pixels into a bigger block, so they look the same and the crosshair can be sharp. '
     + '<b>PNG:</b> the crosshair on a transparent background in its real colours, for anything that takes a crosshair image.</p>';
   const row = document.createElement("div"); row.className = "export-row";
-  const sel = document.createElement("select"); sel.setAttribute("aria-label", "Resolution of the pack below");
-  for (const [v, l] of [[16, "On top of vanilla or a 16x pack"], [32, "On top of a 32x pack"], [64, "On top of a 64x pack"], [128, "On top of a 128x pack"], [256, "On top of a 256x pack"], [512, "On top of a 512x pack"]]) {
-    const o = document.createElement("option"); o.value = v; o.textContent = l; sel.appendChild(o); }
+  const sel = document.createElement("input"); sel.type = "file"; sel.accept = ".zip,.jar,.png"; sel.setAttribute("aria-label", "Pack, icons.png or 1.8.9.jar to put the crosshair on");
+  const det = document.createElement("select"); det.setAttribute("aria-label", "Crosshair detail");
+  for (const [v, l] of [[0, "Crosshair detail: same as those icons"], [64, "Crosshair detail: 64x (sharper)"], [128, "Crosshair detail: 128x"]]) { const o = document.createElement("option"); o.value = v; o.textContent = l; if (v === 64) o.selected = true; det.appendChild(o); }
   const b1 = document.createElement("button"); b1.type = "button"; b1.className = "btn"; b1.textContent = "Crosshair-only pack (.zip)";
   const sel2 = document.createElement("select"); sel2.setAttribute("aria-label", "PNG size");
   for (const v of [16, 32, 64, 128, 256, 512]) { const o = document.createElement("option"); o.value = v; o.textContent = v + " × " + v + " px"; if (v === 128) o.selected = true; sel2.appendChild(o); }
   const b2 = document.createElement("button"); b2.type = "button"; b2.className = "btn"; b2.textContent = "Crosshair PNG";
   const row2 = document.createElement("div"); row2.className = "export-row";
-  row.append(sel, b1); row2.append(sel2, b2);
+  row.append(sel, det, b1); row2.append(sel2, b2);
   const msg = document.createElement("p"); msg.className = "status"; msg.setAttribute("role", "status");
   box.append(row, row2, msg); card.appendChild(box);
   const save2 = async (name, make) => {
@@ -4545,7 +4572,14 @@ function crossPngBlob(px) {                                     // true colours 
       msg.textContent = "Saved " + name + "."; msg.className = "status ok";
     } catch (e) { msg.textContent = e && e.code === "declined" ? "Download cancelled." : "Couldn't save the file: " + (e && e.message || e); msg.className = "status err"; }
   };
-  b1.addEventListener("click", () => save2(`Galaxy-GUI-crosshair-${sel.value}x-1.8.9.zip`, () => crossOnlyPackBlob(+sel.value)));
+  b1.disabled = true;
+  sel.addEventListener("change", async () => {
+    const file = sel.files && sel.files[0]; if (!file) return; b1.disabled = true;
+    try { msg.textContent = "Reading " + file.name + "…"; msg.className = "status"; const base = await loadCrossBase(file);
+      msg.textContent = `Found icons.png (${base.w / 16}x) in ${file.name}. Now make the pack.`; msg.className = "status ok"; b1.disabled = false;
+    } catch (e) { crossBase = null; msg.textContent = (e && e.message) || String(e); msg.className = "status err"; }
+  });
+  b1.addEventListener("click", () => crossBase && save2(`Crosshair-on-${crossBase.from.replace(/\.(zip|jar|png)$/i, "").replace(/[^\w.-]+/g, "_").slice(0, 40)}.zip`, () => crossOnlyPackBlob(+det.value)));
   b2.addEventListener("click", () => save2(`Galaxy-GUI-crosshair-${sel2.value}px.png`, async () => crossPngBlob(+sel2.value)));
 })();
 
