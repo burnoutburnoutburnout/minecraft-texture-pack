@@ -1,4 +1,35 @@
 const pause = () => new Promise(r => setTimeout(r, 0));
+/* Minecraft shrinks HUD textures to the screen with nearest-pixel sampling (no smoothing), so fine detail in a high-res
+   pack turns into speckles. hudFilter pre-shrinks an image to the screen size for one GUI scale with a proper
+   alpha-weighted area average, then blows it back up to the same size, so whichever texel the game picks for a
+   screen pixel already holds that pixel's smoothed colour. texPerPx = texture pixels per screen pixel (S / GUI scale). */
+function hudFilter(src, w, h, texPerPx) {
+  const f = texPerPx; if (!(f > 1.001)) return src;
+  const W2 = Math.max(1, Math.round(w / f)), H2 = Math.max(1, Math.round(h / f));
+  const pass = (n, m) => {                                   // for 0..m-1 screen px: list of [texel, weight] over 0..n-1
+    const out = [];
+    for (let k = 0; k < m; k++) { const a = k * n / m, b2 = (k + 1) * n / m, list = [];
+      for (let i = Math.floor(a); i < Math.min(n, Math.ceil(b2)); i++) { const wgt = Math.min(b2, i + 1) - Math.max(a, i); if (wgt > 1e-6) list.push([i, wgt]); }
+      out.push(list); }
+    return out; };
+  const cx = pass(w, W2), cy = pass(h, H2);
+  const tmp = new Float32Array(W2 * h * 4);                  // horizontal pass, premultiplied
+  for (let y = 0; y < h; y++) for (let X = 0; X < W2; X++) { let r = 0, g = 0, bb = 0, a = 0, ws = 0;
+    for (const [i, wg] of cx[X]) { const q = (y * w + i) * 4, al = src[q + 3] / 255; r += src[q] * al * wg; g += src[q + 1] * al * wg; bb += src[q + 2] * al * wg; a += al * wg; ws += wg; }
+    const o = (y * W2 + X) * 4; tmp[o] = r / ws; tmp[o + 1] = g / ws; tmp[o + 2] = bb / ws; tmp[o + 3] = a / ws; }
+  const small = new Float32Array(W2 * H2 * 4);               // vertical pass
+  for (let Y = 0; Y < H2; Y++) for (let X = 0; X < W2; X++) { let r = 0, g = 0, bb = 0, a = 0, ws = 0;
+    for (const [j, wg] of cy[Y]) { const q = (j * W2 + X) * 4; r += tmp[q] * wg; g += tmp[q + 1] * wg; bb += tmp[q + 2] * wg; a += tmp[q + 3] * wg; ws += wg; }
+    const o = (Y * W2 + X) * 4; small[o] = r / ws; small[o + 1] = g / ws; small[o + 2] = bb / ws; small[o + 3] = a / ws; }
+  const out = new Uint8ClampedArray(w * h * 4);              // back up to full size, nearest
+  const mx = new Int32Array(w), my = new Int32Array(h);
+  for (let i = 0; i < w; i++) mx[i] = Math.min(W2 - 1, Math.floor((i + 0.5) / f));
+  for (let j = 0; j < h; j++) my[j] = Math.min(H2 - 1, Math.floor((j + 0.5) / f));
+  for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) { const q = (my[j] * W2 + mx[i]) * 4, o = (j * w + i) * 4, a = small[q + 3];
+    if (a > 1e-4) { out[o] = small[q] / a; out[o + 1] = small[q + 1] / a; out[o + 2] = small[q + 2] / a; out[o + 3] = a * 255; } }
+  return out;
+}
+const hudTexPerPx = () => { const g = +st.guiMatch || 0; return g > 0 ? (st.res / 16) / g : 0; };
 async function buildPack(progress) {
   const S = st.res / 16, Wd = 256 * S, icons = new Uint8ClampedArray(Wd * Wd * 4);
   const put = (img, bx, by) => { for (let y = 0; y < img.h; y++) icons.set(img.data.subarray(y * img.w * 4, (y + 1) * img.w * 4), ((by * S + y) * Wd + bx * S) * 4); };
@@ -57,19 +88,23 @@ async function buildPack(progress) {
   for (let i = 0; i < jobs.length; i++) { jobs[i](); progress((i + 1) / total, "Drawing textures…"); await pause(); }
 
   const zip = new JSZip(), anim = "assets/minecraft/mcpatcher/anim/galaxygui/";
+  // see hudFilter; the crosshair (its own strip, or the top-left 16 x 16 of icons.png) keeps colour multiplied by alpha
+  const premul = (d, w, x1, y1) => { for (let y = 0; y < y1; y++) for (let x = 0; x < x1; x++) { const q = (y * w + x) * 4, a = d[q + 3] / 255; d[q] *= a; d[q + 1] *= a; d[q + 2] *= a; } return d; };
+  const encHUD = (d, w, h, cross) => { const f = hudTexPerPx(); if (!(f > 1.001)) return encodePNG(d, w, h);
+    const o = hudFilter(d, w, h, f); if (cross) premul(o, w, cross[0], cross[1]); return encodePNG(o, w, h); };
   zip.file("pack.mcmeta", JSON.stringify({ pack: { pack_format: 1, description: `§dGalaxy GUI §7${st.res}x\n§8Galaxy hearts & XP, steak hunger` } }, null, 2));
   const icon = HRT(28, 0, "full"), pk = new Uint8ClampedArray(256 * 256 * 4);
   for (let y = 0; y < icon.h; y++) pk.set(icon.data.subarray(y * icon.w * 4, (y + 1) * icon.w * 4), ((y + 2) * 256 + 2) * 4);
   zip.file("pack.png", encodePNG(pk, 256, 256));
   progress((jobs.length + 1) / total, "Compressing icons…"); await pause();
-  zip.file("assets/minecraft/textures/gui/icons.png", encodePNG(icons, Wd, Wd));
+  zip.file("assets/minecraft/textures/gui/icons.png", encHUD(icons, Wd, Wd, [16 * S, 16 * S]));
   progress((jobs.length + 2) / total, "Compressing heart animation…"); await pause();
-  if (aH) zip.file(anim + "hearts.png", encodePNG(hearts, hw, hh * HEART_FRAMES));
-  if (hcSeparate) zip.file(anim + "hearts_hardcore.png", encodePNG(heartsHC, hw, hh * HEART_FRAMES));
+  if (aH) zip.file(anim + "hearts.png", encHUD(hearts, hw, hh * HEART_FRAMES));
+  if (hcSeparate) zip.file(anim + "hearts_hardcore.png", encHUD(heartsHC, hw, hh * HEART_FRAMES));
   progress((jobs.length + 3) / total, "Compressing XP animation…"); await pause();
-  if (aX) zip.file(anim + "xp.png", encodePNG(xp, xw, xh * XP_FRAMES));
-  if (WG) zip.file("assets/minecraft/textures/gui/widgets.png", encodePNG(WG.out, WG.Wd, WG.Wd));
-  if (aB) { zip.file(anim + "hotbar.png", encodePNG(hbStrip, bw, bh * BA.n)); zip.file(anim + "hotbar_sel.png", encodePNG(selStrip, sw, sw * BA.n)); }
+  if (aX) zip.file(anim + "xp.png", encHUD(xp, xw, xh * XP_FRAMES));
+  if (WG) zip.file("assets/minecraft/textures/gui/widgets.png", encHUD(WG.out, WG.Wd, WG.Wd));
+  if (aB) { zip.file(anim + "hotbar.png", encHUD(hbStrip, bw, bh * BA.n)); zip.file(anim + "hotbar_sel.png", encHUD(selStrip, sw, sw * BA.n)); }
   // interpolate=true (OptiFine 1.8.9 HD U L5 or newer) blends frames on every rendered frame instead of stepping each tick
   const props = (src, x, y, w, h, dur, smooth) => `from=./${src}\nto=textures/gui/icons.png\nx=${x}\ny=${y}\nw=${w}\nh=${h}\nduration=${dur}\n`
     + (smooth ? "interpolate=true\n" : "");
@@ -88,7 +123,7 @@ async function buildPack(progress) {
   if (crossAnimated(st.cross)) {
     const CA = animFrames(st.cross, "cross", st.res), cw = 16 * S, cs = new Uint8ClampedArray(cw * cw * CA.n * 4);
     for (let f = 0; f < CA.n; f++) cs.set(crosshairIcon(S, st.cross, f / CA.n).data, f * cw * cw * 4);
-    zip.file(anim + "crosshair.png", encodePNG(cs, cw, cw * CA.n));
+    zip.file(anim + "crosshair.png", encHUD(cs, cw, cw * CA.n, [cw, cw * CA.n]));
     zip.file(anim + "crosshair.properties", props("crosshair.png", 0, 0, cw, cw, CA.dur, st.cross.animFps === "smooth"));
   }
   progress(1, "Zipping…"); await pause();
@@ -157,4 +192,5 @@ setTimeout(() => { buildPreview(); drawThumbs(); }, 0);
   });
 })();
 
+setTimeout(drawGameCheck, 400);
 </script>

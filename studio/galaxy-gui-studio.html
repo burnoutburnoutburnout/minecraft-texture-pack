@@ -71,6 +71,7 @@ canvas.fit { display: block; width: 100%; height: auto; }
 .designs { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 8px; }
 .design { appearance: none; border: 1px solid var(--line); background: var(--panel-2); color: var(--fg); border-radius: 10px; padding: 6px 4px 8px; display: grid; justify-items: center; gap: 2px; cursor: pointer; font: inherit; font-size: 12px; line-height: 1.2; }
 .design canvas { width: 56px; height: 56px; }
+.gamecheck { display: block; image-rendering: pixelated; max-width: 100%; margin-top: 8px; border-radius: 6px; background: #7a7a7a; }
 .designs.big { grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); }
 .designs.big .design canvas { width: 84px; height: 84px; }
 .designs.wide { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
@@ -167,6 +168,7 @@ code { font-family: var(--font-mono); font-size: 0.9em; }
         <h2 id="h-export"><span class="dot"></span>Build the pack</h2>
         <div class="export-row">
           <div class="seg" role="group" aria-label="Resolution">
+            <button type="button" id="r32" aria-pressed="false">32x</button>
             <button type="button" id="r64" aria-pressed="false">64x</button>
             <button type="button" id="r128" aria-pressed="false">128x</button>
             <button type="button" id="r256" aria-pressed="true">256x</button>
@@ -178,6 +180,23 @@ code { font-family: var(--font-mono); font-size: 0.9em; }
         </div>
         <div class="progress" aria-hidden="true"><div id="bar"></div></div>
         <p class="status" id="status" role="status"></p>
+        <div class="saves" id="gui-box">
+          <p class="group-label">Sharpen for my GUI scale</p>
+          <div class="export-row">
+            <label class="sr-only" for="gui-match">GUI scale you play at</label>
+            <select id="gui-match">
+              <option value="0">Off: full detail (can look speckly in game)</option>
+              <option value="1">GUI scale 1 (Small)</option>
+              <option value="2">GUI scale 2 (Normal)</option>
+              <option value="3">GUI scale 3 (Large)</option>
+              <option value="4">GUI scale 4 (Auto on a 1080p screen)</option>
+              <option value="5">GUI scale 5</option>
+              <option value="6">GUI scale 6 (Auto on a 1440p screen)</option>
+            </select>
+          </div>
+          <p class="hint" id="gui-hint"></p>
+          <canvas id="gamecheck" class="gamecheck" width="10" height="10" aria-label="The XP bar, hearts and hotbar at in-game size"></canvas>
+        </div>
         <ul class="notes">
           <li>For FPS, 128x is the sweet spot: at normal GUI scales it looks the same as 256x or 512x (the game shows the HUD with only a few screen pixels per texture pixel), with a much smaller texture. 512x builds an 8192 × 8192 icons file.</li>
           <li>Install: put the zip in <code>.minecraft/resourcepacks/</code> without unzipping it.</li>
@@ -3275,7 +3294,7 @@ const DEFAULTS = {
   boss: { c1: "#3c0a46", c2: "#b428a0", c3: "#ff6edc" },
   jump: { c1: "#5a2e06", c2: "#d28818", c3: "#ffe26e" },
   bubble: { col: "#78c8ff", style: "classic", accent: "#ffd27a", size: 1, rim: 1, shine: 1, alpha: 1 },
-  cross: clone(CROSS_BASE), pvCrossInvert: true,
+  cross: clone(CROSS_BASE), pvCrossInvert: true, guiMatch: 0,
   hotbar: clone(HB_DEFAULTS), itemScale: 1,
   res: 128, perf: { preset: "light", animHearts: true, animHardcore: true, animXP: true, animHotbar: true },
 };
@@ -4055,6 +4074,7 @@ function syncInputs() {
   }
   for (const [set, cfg] of Object.entries(chipSets)) for (const b of $("chips-" + set).children) b.setAttribute("aria-pressed", String(b.dataset.name === cfg.sel()));
   for (const r of RESOLUTIONS) $("r" + r).setAttribute("aria-pressed", String(st.res === r));
+  if ($("gui-match")) $("gui-match").value = String(+st.guiMatch || 0);
 }
 function wireVariations() {
   $("vary-make").addEventListener("click", makeVariations);
@@ -4175,14 +4195,34 @@ function drawHud(now) {
 requestAnimationFrame(drawHud);
 
 let timer = null;
+/* the XP bar, hearts and part of the hotbar the way the game shows them: the pack texture (sharpened if that is on),
+   sampled with nearest pixels at the GUI scale, one canvas pixel per screen pixel */
+let checkTimer = null;
+function drawGameCheck() {
+  const cv = $("gamecheck"); if (!cv) return;
+  const g = +st.guiMatch || 2, S = st.res / 16, f = hudTexPerPx(), dpr = window.devicePixelRatio || 1;
+  const pre = (im) => { const d = f > 0 ? hudFilter(im.data, im.w, im.h, f) : im.data; return toCanvas({ w: im.w, h: im.h, data: d instanceof Uint8ClampedArray ? d : new Uint8ClampedArray(d) }); };
+  const W = 186 * g, H = 44 * g; cv.width = W; cv.height = H; cv.style.width = (W / dpr) + "px"; cv.style.height = (H / dpr) + "px";
+  const c = cv.getContext("2d"); c.imageSmoothingEnabled = false; c.fillStyle = "#6f8a4a"; c.fillRect(0, 0, W, H);
+  const heart = pre(HRT(S, 0.1, "full")), bg = pre(BAR(S, 0, "bg")), fill = pre(BAR(S, 0.3, "fill"));
+  for (let i = 0; i < 10; i++) c.drawImage(heart, 0, 0, 9 * S, 9 * S, (2 + i * 8) * g, 2 * g, 9 * g, 9 * g);
+  c.drawImage(bg, 0, 0, 182 * S, 5 * S, 2 * g, 12 * g, 182 * g, 5 * g);
+  c.drawImage(fill, 0, 0, 120 * S, 5 * S, 2 * g, 12 * g, 120 * g, 5 * g);
+  if (st.hotbar.enabled) { const hb = pre(hotbarIcon(S, st.hotbar, 0)); c.drawImage(hb, 0, 0, 182 * S, 22 * S, 2 * g, 19 * g, 182 * g, 22 * g); }
+  const tip = { 1: 16, 2: 32, 3: 64, 4: 64, 5: 128, 6: 128 }[g];
+  $("gui-hint").textContent = (+st.guiMatch ? `Textures are pre-shrunk for GUI scale ${g}, so nothing turns speckly at that size. ${st.res > tip ? `${tip}x is enough for this scale and lighter.` : ""} If you change your GUI scale, change this too.`
+    : "Minecraft shrinks HUD textures without smoothing, so a detailed pack can look speckly or broken. Pick the GUI scale you play at (Options, Video Settings, GUI Scale).")
+    + ` Below: your HUD at GUI scale ${g}, pixel for pixel as the game draws it.`;
+}
+$("gui-match").addEventListener("change", () => { st.guiMatch = +$("gui-match").value; save(); clearTimeout(checkTimer); checkTimer = setTimeout(drawGameCheck, 50); });
 function changed() {
   if ($("perf-est")) syncPerf();
   for (const pEl of document.querySelectorAll(".fps-info")) pEl.textContent = fpsInfoText(st[pEl.dataset.el], pEl.dataset.kind);
   save(); clearTimeout(timer);
   if (EDIT[st.tab]) syncEditor(st.tab);
-  timer = setTimeout(() => { buildPreview(); drawThumbs(); }, 150);
+  timer = setTimeout(() => { buildPreview(); drawThumbs(); drawGameCheck(); }, 150);
 }
-const RESOLUTIONS = [64, 128, 256, 512];
+const RESOLUTIONS = [32, 64, 128, 256, 512];
 for (const r of RESOLUTIONS) $("r" + r).addEventListener("click", () => { st.res = r; syncInputs(); changed(); });
 $("reset").addEventListener("click", () => { const tab = st.tab; st = clone(DEFAULTS); st.tab = tab; syncInputs(); changed(); showTab(); setStatus("Everything is back to the original pack.", "ok"); });
 $("copy").addEventListener("click", () => {
@@ -4289,6 +4329,37 @@ renderSaves();
 function setStatus(msg, cls = "") { const s = $("status"); s.textContent = msg; s.className = "status " + cls; }
 
 const pause = () => new Promise(r => setTimeout(r, 0));
+/* Minecraft shrinks HUD textures to the screen with nearest-pixel sampling (no smoothing), so fine detail in a high-res
+   pack turns into speckles. hudFilter pre-shrinks an image to the screen size for one GUI scale with a proper
+   alpha-weighted area average, then blows it back up to the same size, so whichever texel the game picks for a
+   screen pixel already holds that pixel's smoothed colour. texPerPx = texture pixels per screen pixel (S / GUI scale). */
+function hudFilter(src, w, h, texPerPx) {
+  const f = texPerPx; if (!(f > 1.001)) return src;
+  const W2 = Math.max(1, Math.round(w / f)), H2 = Math.max(1, Math.round(h / f));
+  const pass = (n, m) => {                                   // for 0..m-1 screen px: list of [texel, weight] over 0..n-1
+    const out = [];
+    for (let k = 0; k < m; k++) { const a = k * n / m, b2 = (k + 1) * n / m, list = [];
+      for (let i = Math.floor(a); i < Math.min(n, Math.ceil(b2)); i++) { const wgt = Math.min(b2, i + 1) - Math.max(a, i); if (wgt > 1e-6) list.push([i, wgt]); }
+      out.push(list); }
+    return out; };
+  const cx = pass(w, W2), cy = pass(h, H2);
+  const tmp = new Float32Array(W2 * h * 4);                  // horizontal pass, premultiplied
+  for (let y = 0; y < h; y++) for (let X = 0; X < W2; X++) { let r = 0, g = 0, bb = 0, a = 0, ws = 0;
+    for (const [i, wg] of cx[X]) { const q = (y * w + i) * 4, al = src[q + 3] / 255; r += src[q] * al * wg; g += src[q + 1] * al * wg; bb += src[q + 2] * al * wg; a += al * wg; ws += wg; }
+    const o = (y * W2 + X) * 4; tmp[o] = r / ws; tmp[o + 1] = g / ws; tmp[o + 2] = bb / ws; tmp[o + 3] = a / ws; }
+  const small = new Float32Array(W2 * H2 * 4);               // vertical pass
+  for (let Y = 0; Y < H2; Y++) for (let X = 0; X < W2; X++) { let r = 0, g = 0, bb = 0, a = 0, ws = 0;
+    for (const [j, wg] of cy[Y]) { const q = (j * W2 + X) * 4; r += tmp[q] * wg; g += tmp[q + 1] * wg; bb += tmp[q + 2] * wg; a += tmp[q + 3] * wg; ws += wg; }
+    const o = (Y * W2 + X) * 4; small[o] = r / ws; small[o + 1] = g / ws; small[o + 2] = bb / ws; small[o + 3] = a / ws; }
+  const out = new Uint8ClampedArray(w * h * 4);              // back up to full size, nearest
+  const mx = new Int32Array(w), my = new Int32Array(h);
+  for (let i = 0; i < w; i++) mx[i] = Math.min(W2 - 1, Math.floor((i + 0.5) / f));
+  for (let j = 0; j < h; j++) my[j] = Math.min(H2 - 1, Math.floor((j + 0.5) / f));
+  for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) { const q = (my[j] * W2 + mx[i]) * 4, o = (j * w + i) * 4, a = small[q + 3];
+    if (a > 1e-4) { out[o] = small[q] / a; out[o + 1] = small[q + 1] / a; out[o + 2] = small[q + 2] / a; out[o + 3] = a * 255; } }
+  return out;
+}
+const hudTexPerPx = () => { const g = +st.guiMatch || 0; return g > 0 ? (st.res / 16) / g : 0; };
 async function buildPack(progress) {
   const S = st.res / 16, Wd = 256 * S, icons = new Uint8ClampedArray(Wd * Wd * 4);
   const put = (img, bx, by) => { for (let y = 0; y < img.h; y++) icons.set(img.data.subarray(y * img.w * 4, (y + 1) * img.w * 4), ((by * S + y) * Wd + bx * S) * 4); };
@@ -4347,19 +4418,23 @@ async function buildPack(progress) {
   for (let i = 0; i < jobs.length; i++) { jobs[i](); progress((i + 1) / total, "Drawing textures…"); await pause(); }
 
   const zip = new JSZip(), anim = "assets/minecraft/mcpatcher/anim/galaxygui/";
+  // see hudFilter; the crosshair (its own strip, or the top-left 16 x 16 of icons.png) keeps colour multiplied by alpha
+  const premul = (d, w, x1, y1) => { for (let y = 0; y < y1; y++) for (let x = 0; x < x1; x++) { const q = (y * w + x) * 4, a = d[q + 3] / 255; d[q] *= a; d[q + 1] *= a; d[q + 2] *= a; } return d; };
+  const encHUD = (d, w, h, cross) => { const f = hudTexPerPx(); if (!(f > 1.001)) return encodePNG(d, w, h);
+    const o = hudFilter(d, w, h, f); if (cross) premul(o, w, cross[0], cross[1]); return encodePNG(o, w, h); };
   zip.file("pack.mcmeta", JSON.stringify({ pack: { pack_format: 1, description: `§dGalaxy GUI §7${st.res}x\n§8Galaxy hearts & XP, steak hunger` } }, null, 2));
   const icon = HRT(28, 0, "full"), pk = new Uint8ClampedArray(256 * 256 * 4);
   for (let y = 0; y < icon.h; y++) pk.set(icon.data.subarray(y * icon.w * 4, (y + 1) * icon.w * 4), ((y + 2) * 256 + 2) * 4);
   zip.file("pack.png", encodePNG(pk, 256, 256));
   progress((jobs.length + 1) / total, "Compressing icons…"); await pause();
-  zip.file("assets/minecraft/textures/gui/icons.png", encodePNG(icons, Wd, Wd));
+  zip.file("assets/minecraft/textures/gui/icons.png", encHUD(icons, Wd, Wd, [16 * S, 16 * S]));
   progress((jobs.length + 2) / total, "Compressing heart animation…"); await pause();
-  if (aH) zip.file(anim + "hearts.png", encodePNG(hearts, hw, hh * HEART_FRAMES));
-  if (hcSeparate) zip.file(anim + "hearts_hardcore.png", encodePNG(heartsHC, hw, hh * HEART_FRAMES));
+  if (aH) zip.file(anim + "hearts.png", encHUD(hearts, hw, hh * HEART_FRAMES));
+  if (hcSeparate) zip.file(anim + "hearts_hardcore.png", encHUD(heartsHC, hw, hh * HEART_FRAMES));
   progress((jobs.length + 3) / total, "Compressing XP animation…"); await pause();
-  if (aX) zip.file(anim + "xp.png", encodePNG(xp, xw, xh * XP_FRAMES));
-  if (WG) zip.file("assets/minecraft/textures/gui/widgets.png", encodePNG(WG.out, WG.Wd, WG.Wd));
-  if (aB) { zip.file(anim + "hotbar.png", encodePNG(hbStrip, bw, bh * BA.n)); zip.file(anim + "hotbar_sel.png", encodePNG(selStrip, sw, sw * BA.n)); }
+  if (aX) zip.file(anim + "xp.png", encHUD(xp, xw, xh * XP_FRAMES));
+  if (WG) zip.file("assets/minecraft/textures/gui/widgets.png", encHUD(WG.out, WG.Wd, WG.Wd));
+  if (aB) { zip.file(anim + "hotbar.png", encHUD(hbStrip, bw, bh * BA.n)); zip.file(anim + "hotbar_sel.png", encHUD(selStrip, sw, sw * BA.n)); }
   // interpolate=true (OptiFine 1.8.9 HD U L5 or newer) blends frames on every rendered frame instead of stepping each tick
   const props = (src, x, y, w, h, dur, smooth) => `from=./${src}\nto=textures/gui/icons.png\nx=${x}\ny=${y}\nw=${w}\nh=${h}\nduration=${dur}\n`
     + (smooth ? "interpolate=true\n" : "");
@@ -4378,7 +4453,7 @@ async function buildPack(progress) {
   if (crossAnimated(st.cross)) {
     const CA = animFrames(st.cross, "cross", st.res), cw = 16 * S, cs = new Uint8ClampedArray(cw * cw * CA.n * 4);
     for (let f = 0; f < CA.n; f++) cs.set(crosshairIcon(S, st.cross, f / CA.n).data, f * cw * cw * 4);
-    zip.file(anim + "crosshair.png", encodePNG(cs, cw, cw * CA.n));
+    zip.file(anim + "crosshair.png", encHUD(cs, cw, cw * CA.n, [cw, cw * CA.n]));
     zip.file(anim + "crosshair.properties", props("crosshair.png", 0, 0, cw, cw, CA.dur, st.cross.animFps === "smooth"));
   }
   progress(1, "Zipping…"); await pause();
@@ -4447,4 +4522,5 @@ setTimeout(() => { buildPreview(); drawThumbs(); }, 0);
   });
 })();
 
+setTimeout(drawGameCheck, 400);
 </script>

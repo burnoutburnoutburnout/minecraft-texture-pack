@@ -17,7 +17,7 @@ const DEFAULTS = {
   boss: { c1: "#3c0a46", c2: "#b428a0", c3: "#ff6edc" },
   jump: { c1: "#5a2e06", c2: "#d28818", c3: "#ffe26e" },
   bubble: { col: "#78c8ff", style: "classic", accent: "#ffd27a", size: 1, rim: 1, shine: 1, alpha: 1 },
-  cross: clone(CROSS_BASE), pvCrossInvert: true,
+  cross: clone(CROSS_BASE), pvCrossInvert: true, guiMatch: 0,
   hotbar: clone(HB_DEFAULTS), itemScale: 1,
   res: 128, perf: { preset: "light", animHearts: true, animHardcore: true, animXP: true, animHotbar: true },
 };
@@ -797,6 +797,7 @@ function syncInputs() {
   }
   for (const [set, cfg] of Object.entries(chipSets)) for (const b of $("chips-" + set).children) b.setAttribute("aria-pressed", String(b.dataset.name === cfg.sel()));
   for (const r of RESOLUTIONS) $("r" + r).setAttribute("aria-pressed", String(st.res === r));
+  if ($("gui-match")) $("gui-match").value = String(+st.guiMatch || 0);
 }
 function wireVariations() {
   $("vary-make").addEventListener("click", makeVariations);
@@ -917,14 +918,34 @@ function drawHud(now) {
 requestAnimationFrame(drawHud);
 
 let timer = null;
+/* the XP bar, hearts and part of the hotbar the way the game shows them: the pack texture (sharpened if that is on),
+   sampled with nearest pixels at the GUI scale, one canvas pixel per screen pixel */
+let checkTimer = null;
+function drawGameCheck() {
+  const cv = $("gamecheck"); if (!cv) return;
+  const g = +st.guiMatch || 2, S = st.res / 16, f = hudTexPerPx(), dpr = window.devicePixelRatio || 1;
+  const pre = (im) => { const d = f > 0 ? hudFilter(im.data, im.w, im.h, f) : im.data; return toCanvas({ w: im.w, h: im.h, data: d instanceof Uint8ClampedArray ? d : new Uint8ClampedArray(d) }); };
+  const W = 186 * g, H = 44 * g; cv.width = W; cv.height = H; cv.style.width = (W / dpr) + "px"; cv.style.height = (H / dpr) + "px";
+  const c = cv.getContext("2d"); c.imageSmoothingEnabled = false; c.fillStyle = "#6f8a4a"; c.fillRect(0, 0, W, H);
+  const heart = pre(HRT(S, 0.1, "full")), bg = pre(BAR(S, 0, "bg")), fill = pre(BAR(S, 0.3, "fill"));
+  for (let i = 0; i < 10; i++) c.drawImage(heart, 0, 0, 9 * S, 9 * S, (2 + i * 8) * g, 2 * g, 9 * g, 9 * g);
+  c.drawImage(bg, 0, 0, 182 * S, 5 * S, 2 * g, 12 * g, 182 * g, 5 * g);
+  c.drawImage(fill, 0, 0, 120 * S, 5 * S, 2 * g, 12 * g, 120 * g, 5 * g);
+  if (st.hotbar.enabled) { const hb = pre(hotbarIcon(S, st.hotbar, 0)); c.drawImage(hb, 0, 0, 182 * S, 22 * S, 2 * g, 19 * g, 182 * g, 22 * g); }
+  const tip = { 1: 16, 2: 32, 3: 64, 4: 64, 5: 128, 6: 128 }[g];
+  $("gui-hint").textContent = (+st.guiMatch ? `Textures are pre-shrunk for GUI scale ${g}, so nothing turns speckly at that size. ${st.res > tip ? `${tip}x is enough for this scale and lighter.` : ""} If you change your GUI scale, change this too.`
+    : "Minecraft shrinks HUD textures without smoothing, so a detailed pack can look speckly or broken. Pick the GUI scale you play at (Options, Video Settings, GUI Scale).")
+    + ` Below: your HUD at GUI scale ${g}, pixel for pixel as the game draws it.`;
+}
+$("gui-match").addEventListener("change", () => { st.guiMatch = +$("gui-match").value; save(); clearTimeout(checkTimer); checkTimer = setTimeout(drawGameCheck, 50); });
 function changed() {
   if ($("perf-est")) syncPerf();
   for (const pEl of document.querySelectorAll(".fps-info")) pEl.textContent = fpsInfoText(st[pEl.dataset.el], pEl.dataset.kind);
   save(); clearTimeout(timer);
   if (EDIT[st.tab]) syncEditor(st.tab);
-  timer = setTimeout(() => { buildPreview(); drawThumbs(); }, 150);
+  timer = setTimeout(() => { buildPreview(); drawThumbs(); drawGameCheck(); }, 150);
 }
-const RESOLUTIONS = [64, 128, 256, 512];
+const RESOLUTIONS = [32, 64, 128, 256, 512];
 for (const r of RESOLUTIONS) $("r" + r).addEventListener("click", () => { st.res = r; syncInputs(); changed(); });
 $("reset").addEventListener("click", () => { const tab = st.tab; st = clone(DEFAULTS); st.tab = tab; syncInputs(); changed(); showTab(); setStatus("Everything is back to the original pack.", "ok"); });
 $("copy").addEventListener("click", () => {

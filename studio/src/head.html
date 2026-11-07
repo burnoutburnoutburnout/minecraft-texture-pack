@@ -71,6 +71,7 @@ canvas.fit { display: block; width: 100%; height: auto; }
 .designs { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 8px; }
 .design { appearance: none; border: 1px solid var(--line); background: var(--panel-2); color: var(--fg); border-radius: 10px; padding: 6px 4px 8px; display: grid; justify-items: center; gap: 2px; cursor: pointer; font: inherit; font-size: 12px; line-height: 1.2; }
 .design canvas { width: 56px; height: 56px; }
+.gamecheck { display: block; image-rendering: pixelated; max-width: 100%; margin-top: 8px; border-radius: 6px; background: #7a7a7a; }
 .designs.big { grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); }
 .designs.big .design canvas { width: 84px; height: 84px; }
 .designs.wide { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
@@ -167,6 +168,7 @@ code { font-family: var(--font-mono); font-size: 0.9em; }
         <h2 id="h-export"><span class="dot"></span>Build the pack</h2>
         <div class="export-row">
           <div class="seg" role="group" aria-label="Resolution">
+            <button type="button" id="r32" aria-pressed="false">32x</button>
             <button type="button" id="r64" aria-pressed="false">64x</button>
             <button type="button" id="r128" aria-pressed="false">128x</button>
             <button type="button" id="r256" aria-pressed="true">256x</button>
@@ -178,6 +180,23 @@ code { font-family: var(--font-mono); font-size: 0.9em; }
         </div>
         <div class="progress" aria-hidden="true"><div id="bar"></div></div>
         <p class="status" id="status" role="status"></p>
+        <div class="saves" id="gui-box">
+          <p class="group-label">Sharpen for my GUI scale</p>
+          <div class="export-row">
+            <label class="sr-only" for="gui-match">GUI scale you play at</label>
+            <select id="gui-match">
+              <option value="0">Off: full detail (can look speckly in game)</option>
+              <option value="1">GUI scale 1 (Small)</option>
+              <option value="2">GUI scale 2 (Normal)</option>
+              <option value="3">GUI scale 3 (Large)</option>
+              <option value="4">GUI scale 4 (Auto on a 1080p screen)</option>
+              <option value="5">GUI scale 5</option>
+              <option value="6">GUI scale 6 (Auto on a 1440p screen)</option>
+            </select>
+          </div>
+          <p class="hint" id="gui-hint"></p>
+          <canvas id="gamecheck" class="gamecheck" width="10" height="10" aria-label="The XP bar, hearts and hotbar at in-game size"></canvas>
+        </div>
         <ul class="notes">
           <li>For FPS, 128x is the sweet spot: at normal GUI scales it looks the same as 256x or 512x (the game shows the HUD with only a few screen pixels per texture pixel), with a much smaller texture. 512x builds an 8192 × 8192 icons file.</li>
           <li>Install: put the zip in <code>.minecraft/resourcepacks/</code> without unzipping it.</li>
