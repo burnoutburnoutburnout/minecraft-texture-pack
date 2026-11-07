@@ -231,9 +231,12 @@ async function recallCrossBase() {
   const card = document.querySelector('section.card[data-tab="crosshair"]'); if (!card) return;
   const box = document.createElement("div"); box.className = "saves";
   box.innerHTML = '<p class="group-label">Crosshair-only pack</p>'
-    + '<p class="hint">Just this crosshair; your hearts and everything else stay normal. The first time, pick <b>1.8.9.jar</b> from '
-    + '<code>.minecraft/versions/1.8.9/</code> (the crosshair is stored in the same image as the hearts, and the studio needs Minecraft\'s copy of it). '
-    + 'After that it\'s one click. Put the pack at the top of your resource pack list.</p>';
+    + '<p class="hint">Just this crosshair; your hearts and everything else stay normal. The first time, pick Minecraft\'s 1.8.9 game file '
+    + '(the crosshair is stored in the same image as the hearts, and the studio needs Minecraft\'s copy of it). After that it\'s one click. '
+    + 'Put the pack at the top of your resource pack list.</p>'
+    + '<p class="hint"><b>Prism Launcher / MultiMC:</b> click <b>Folders → Launcher Root</b> (or the <b>Folder</b> button), then open '
+    + '<code>libraries/com/mojang/minecraft/1.8.9/</code> and pick <b>minecraft-1.8.9-client.jar</b>. '
+    + '<b>Official launcher:</b> <code>.minecraft/versions/1.8.9/1.8.9.jar</code>.</p>';
   const row = document.createElement("div"); row.className = "export-row";
   const b1 = document.createElement("button"); b1.type = "button"; b1.className = "btn primary"; b1.textContent = "Download crosshair pack";
   const other = document.createElement("button"); other.type = "button"; other.className = "btn"; other.textContent = "Use different icons";
@@ -253,7 +256,7 @@ async function recallCrossBase() {
   };
   const makePack = () => save2("Galaxy-GUI-crosshair-1.8.9.zip", () => crossOnlyPackBlob(64));
   recallCrossBase().then(b => { if (b && !crossBase) crossBase = b; });
-  b1.addEventListener("click", () => { if (crossBase) makePack(); else { say("Pick 1.8.9.jar from .minecraft/versions/1.8.9/ (or your other pack's .zip)."); sel.click(); } });
+  b1.addEventListener("click", () => { if (crossBase) makePack(); else { say("Pick Minecraft's 1.8.9 jar. Prism: Launcher Root → libraries/com/mojang/minecraft/1.8.9/minecraft-1.8.9-client.jar. Official launcher: .minecraft/versions/1.8.9/1.8.9.jar."); sel.click(); } });
   other.addEventListener("click", () => sel.click());
   sel.addEventListener("change", async () => {
     const file = sel.files && sel.files[0]; sel.value = ""; if (!file) return;
