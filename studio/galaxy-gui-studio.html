@@ -4528,6 +4528,9 @@ function crossOnlyPackBlob(detail) {
   if (f > 1.001) { strip = hudFilter(strip, cw, cw * A.n, f); for (let q = 0; q < strip.length; q += 4) { const a = strip[q + 3] / 255; strip[q] *= a; strip[q + 1] *= a; strip[q + 2] *= a; } }
   const icons = new Uint8ClampedArray(base.data);               // the player's icons, crosshair area replaced
   for (let y = 0; y < cw; y++) icons.set(strip.subarray(y * cw * 4, (y + 1) * cw * 4), y * base.w * 4);
+  // vanilla keeps old, unused sprites (signal bars, purple squares) right under the crosshair; some mods draw from
+  // there and show a stray green/purple pixel, so clear that strip (rows 16 to 40, first 16 columns) like Galaxy GUI does
+  for (let y = 16 * S; y < Math.min(base.h, 40 * S); y++) icons.fill(0, (y * base.w) * 4, (y * base.w + cw) * 4);
   const zip = new JSZip(), dir = "assets/minecraft/mcpatcher/anim/galaxyguicross/";
   zip.file("pack.mcmeta", JSON.stringify({ pack: { pack_format: 1, description: "§dGalaxy GUI crosshair\n§8On the icons from " + base.from.slice(0, 40) } }, null, 2));
   const icon = document.createElement("canvas"); icon.width = 128; icon.height = 128; const ig = icon.getContext("2d");
